@@ -37,23 +37,26 @@ jobs:
           cd /builder
           [ -d ./scripts ] || ./setup.sh
 
-      - name: Add feed
-        run: |
-          cd /builder
-          echo "src-link netmonitor $GITHUB_WORKSPACE" >> feeds.conf
-          ./scripts/feeds update netmonitor
-          ./scripts/feeds install -a -p netmonitor
-
-      - name: Install luci dependency
+      - name: Prepare LuCI translation tool
         run: |
           cd /builder
           ./scripts/feeds update luci
-          ./scripts/feeds install luci
+          make -C feeds/luci/modules/luci-base/src clean po2lmo
+          install -D -m0755 feeds/luci/modules/luci-base/src/po2lmo \
+            staging_dir/hostpkg/bin/po2lmo
+          test -x staging_dir/hostpkg/bin/po2lmo
+
+      - name: Add packages
+        run: |
+          cd /builder
+          mkdir -p package/feeds/netmonitor
+          ln -s "$GITHUB_WORKSPACE/netmonitor" package/feeds/netmonitor/netmonitor
+          ln -s "$GITHUB_WORKSPACE/luci-app-netmonitor" \
+            package/feeds/netmonitor/luci-app-netmonitor
 
       - name: Configure
         run: |
           cd /builder
-          make defconfig
           echo 'CONFIG_PACKAGE_netmonitor=m' >> .config
           echo 'CONFIG_PACKAGE_luci-app-netmonitor=m' >> .config
           make defconfig

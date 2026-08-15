@@ -1,6 +1,6 @@
 {
 	"admin/network/netmonitor": {
-		"title": "Network Monitor",
+		"title": "网络监控",
 		"order": 90,
 		"action": {
 			"type": "firstchild"
@@ -12,7 +12,7 @@
 	},
 
 	"admin/network/netmonitor/status": {
-		"title": "Status",
+		"title": "状态",
 		"order": 10,
 		"action": {
 			"type": "view",
@@ -21,7 +21,7 @@
 	},
 
 	"admin/network/netmonitor/history": {
-		"title": "History",
+		"title": "历史",
 		"order": 20,
 		"action": {
 			"type": "view",
@@ -30,7 +30,7 @@
 	},
 
 	"admin/network/netmonitor/settings": {
-		"title": "Settings",
+		"title": "设置",
 		"order": 30,
 		"action": {
 			"type": "view",
