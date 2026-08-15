@@ -1,0 +1,40 @@
+{
+	"admin/network/netmonitor": {
+		"title": "Network Monitor",
+		"order": 90,
+		"action": {
+			"type": "firstchild"
+		},
+		"depends": {
+			"acl": [ "luci-app-netmonitor" ],
+			"uci": { "netmonitor": true }
+		}
+	},
+
+	"admin/network/netmonitor/status": {
+		"title": "Status",
+		"order": 10,
+		"action": {
+			"type": "view",
+			"path": "netmonitor/status"
+		}
+	},
+
+	"admin/network/netmonitor/history": {
+		"title": "History",
+		"order": 20,
+		"action": {
+			"type": "view",
+			"path": "netmonitor/history"
+		}
+	},
+
+	"admin/network/netmonitor/settings": {
+		"title": "Settings",
+		"order": 30,
+		"action": {
+			"type": "view",
+			"path": "netmonitor/settings"
+		}
+	}
+}

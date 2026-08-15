@@ -1,0 +1,14 @@
+{
+	"luci-app-netmonitor": {
+		"description": "Grant UCI and ubus access for luci-app-netmonitor",
+		"read": {
+			"ubus": {
+				"netmonitor": [ "status", "history", "days" ]
+			},
+			"uci": [ "netmonitor" ]
+		},
+		"write": {
+			"uci": [ "netmonitor" ]
+		}
+	}
+}

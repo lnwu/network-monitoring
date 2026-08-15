@@ -1,0 +1,20 @@
+config netmonitor 'main'
+	option interval '30'
+	option retention '30'
+	option ping_count '3'
+	option timeout '8'
+
+	# Domestic checks (direct, bypass OpenClash for CN domains)
+	option cn_http_target 'https://www.baidu.com'
+	option cn_ping_target 'baidu.com'
+
+	# International checks (go through default route, i.e. OpenClash proxy)
+	option intl_http_target 'https://www.google.com/generate_204'
+	# ICMP usually does not go through the proxy; used as a raw reachability signal
+	option intl_ping_target '8.8.8.8'
+
+	# Optional direct (bypass proxy) international reference check
+	option direct_enabled '1'
+	option direct_http_target 'https://www.cloudflare.com/cdn-cgi/trace'
+	# 'auto' detects the WAN L3 device (e.g. pppoe-wan)
+	option wan_interface 'auto'

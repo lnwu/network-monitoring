@@ -1,0 +1,85 @@
+name: Build ipk Release
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  OPENWRT_VERSION: 25.12.0
+  ARCH: aarch64_cortex-a72
+  TARGET: armsr
+  NM_BUILD_VERSION: 1.0.${{ github.run_number }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: openwrt/sdk:${{ env.ARCH }}-${{ env.OPENWRT_VERSION }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add feed
+        run: |
+          cd /homebuilder/openwrt
+          echo "src-link netmonitor $GITHUB_WORKSPACE" >> feeds.conf
+          ./scripts/feeds update netmonitor
+          ./scripts/feeds install -a -p netmonitor
+
+      - name: Install luci dependency
+        run: |
+          cd /homebuilder/openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Configure
+        run: |
+          cd /homebuilder/openwrt
+          make defconfig
+          sed -i 's/CONFIG_PACKAGE_netmonitor=.*/CONFIG_PACKAGE_netmonitor=m/' .config
+          sed -i 's/CONFIG_PACKAGE_luci-app-netmonitor=.*/CONFIG_PACKAGE_luci-app-netmonitor=m/' .config
+          make defconfig
+
+      - name: Compile
+        run: |
+          cd /homebuilder/openwrt
+          make package/netmonitor/compile -j$(nproc) V=s || make package/netmonitor/compile V=s
+          make package/luci-app-netmonitor/compile -j$(nproc) V=s || make package/luci-app-netmonitor/compile V=s
+
+      - name: Collect and rename
+        run: |
+          cd /homebuilder/openwrt
+          mkdir -p $GITHUB_WORKSPACE/out
+          cp bin/packages/*/netmonitor/netmonitor_*_*.ipk $GITHUB_WORKSPACE/out/netmonitor.ipk
+          cp bin/packages/*/netmonitor/luci-app-netmonitor_*_*.ipk $GITHUB_WORKSPACE/out/luci-app-netmonitor.ipk
+          ls -l $GITHUB_WORKSPACE/out
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipks
+          path: out/*.ipk
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ipks
+          path: out
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: latest
+          files: out/*.ipk
+          body: |
+            自动构建（main 分支最新提交）
+            - netmonitor.ipk
+            - luci-app-netmonitor.ipk
+          make_latest: true
