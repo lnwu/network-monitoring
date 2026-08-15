@@ -66,15 +66,19 @@ detect_wan() {
 	[ -n "$dev" ] && echo "$dev"
 }
 
-# do_http <url> [bind_iface] -> "<ok> <code> <time_s>"
+# do_http <url> [bind_iface] [direct] -> "<ok> <code> <time_s>"
 do_http() {
 	local out code t
-	if [ -n "$2" ]; then
+	if [ "$3" = "direct" ]; then
+		[ -n "$2" ] || { echo '0 0 0'; return; }
+		out=$(curl -4 -s -o /dev/null --max-time "$TIMEOUT" --interface "$2" \
+			--proxy '' --noproxy '*' -w '%{http_code} %{time_total}' "$1" 2>/dev/null)
+	elif [ -n "$2" ]; then
 		out=$(curl -4 -s -o /dev/null --max-time "$TIMEOUT" --interface "$2" \
 			-w '%{http_code} %{time_total}' "$1" 2>/dev/null)
 	else
 		out=$(curl -4 -s -o /dev/null --max-time "$TIMEOUT" \
-			-w '%{http_code} %{time_total}' "$1" 2>/dev/null)
+			--proxy '' -w '%{http_code} %{time_total}' "$1" 2>/dev/null)
 	fi
 	code=${out%% *}
 	t=${out##* }
@@ -100,10 +104,27 @@ init_db() {
 		cn_ok INTEGER DEFAULT 0,
 		intl_http_code INTEGER DEFAULT 0,
 		intl_http_time REAL DEFAULT 0,
-		intl_ok INTEGER DEFAULT 0
+		intl_ok INTEGER DEFAULT 0,
+		cn_direct_http_code INTEGER DEFAULT NULL,
+		cn_direct_http_time REAL DEFAULT NULL,
+		cn_direct_ok INTEGER DEFAULT NULL,
+		intl_direct_http_code INTEGER DEFAULT NULL,
+		intl_direct_http_time REAL DEFAULT NULL,
+		intl_direct_ok INTEGER DEFAULT NULL
 	);"; then
 		return 1
 	fi
+	for column in \
+		"cn_direct_http_code:INTEGER" "cn_direct_http_time:REAL" "cn_direct_ok:INTEGER" \
+		"intl_direct_http_code:INTEGER" "intl_direct_http_time:REAL" "intl_direct_ok:INTEGER"; do
+		name=${column%%:*}
+		type=${column#*:}
+		if ! sqlite3 "$DB" "SELECT $name FROM samples LIMIT 0;" >/dev/null 2>&1; then
+			if ! sqlite3 "$DB" "ALTER TABLE samples ADD COLUMN $name $type DEFAULT NULL;" >/dev/null 2>&1; then
+				return 1
+			fi
+		fi
+	done
 	if ! sqlite3 "$DB" "SELECT sample_interval FROM samples LIMIT 0;" >/dev/null 2>&1; then
 		if ! sqlite3 "$DB" "ALTER TABLE samples ADD COLUMN sample_interval INTEGER DEFAULT 30;" >/dev/null 2>&1; then
 			return 1
@@ -150,16 +171,14 @@ while :; do
 	mkdir -p "$WORKDIR"
 	WAN_DEV=$(detect_wan)
 
-	# ---- domestic ----
 	(
-		set -- $(do_http "$CN_HTTP" "$WAN_DEV")
-		if [ "${2:-0}" = "0" ] && [ -n "$WAN_DEV" ]; then
-			set -- $(do_http "$CN_HTTP")
-		fi
+		set -- $(do_http "$CN_HTTP")
 		echo "$1 $2 $3" > "$WORKDIR/cn_http"
 	) &
 
 	( set -- $(do_http "$INTL_HTTP"); echo "$1 $2 $3" > "$WORKDIR/intl_http" ) &
+	( set -- $(do_http "$CN_HTTP" "$WAN_DEV" direct); echo "$1 $2 $3" > "$WORKDIR/cn_direct_http" ) &
+	( set -- $(do_http "$INTL_HTTP" "$WAN_DEV" direct); echo "$1 $2 $3" > "$WORKDIR/intl_direct_http" ) &
 
 	wait
 
@@ -171,12 +190,24 @@ while :; do
 	intl_http_ok=${1:-0} intl_http_code=${2:-0} intl_http_time=${3:-0}
 	intl_ok=$intl_http_ok
 
+	set -- $(cat "$WORKDIR/cn_direct_http" 2>/dev/null)
+	cn_direct_http_ok=${1:-0} cn_direct_http_code=${2:-0} cn_direct_http_time=${3:-0}
+	cn_direct_ok=$cn_direct_http_ok
+
+	set -- $(cat "$WORKDIR/intl_direct_http" 2>/dev/null)
+	intl_direct_http_ok=${1:-0} intl_direct_http_code=${2:-0} intl_direct_http_time=${3:-0}
+	intl_direct_ok=$intl_direct_http_ok
+
 	if sqlite3 -cmd ".timeout 3000" "$DB" "INSERT OR REPLACE INTO samples
 		(ts, cn_http_code, cn_http_time, cn_ok,
-		 intl_http_code, intl_http_time, intl_ok, sample_interval)
+		 intl_http_code, intl_http_time, intl_ok,
+		 cn_direct_http_code, cn_direct_http_time, cn_direct_ok,
+		 intl_direct_http_code, intl_direct_http_time, intl_direct_ok, sample_interval)
 		VALUES
 		($ts, $cn_http_code, $cn_http_time, $cn_ok,
-		 $intl_http_code, $intl_http_time, $intl_ok, $INTERVAL);"; then
+		 $intl_http_code, $intl_http_time, $intl_ok,
+		 $cn_direct_http_code, $cn_direct_http_time, $cn_direct_ok,
+		 $intl_direct_http_code, $intl_direct_http_time, $intl_direct_ok, $INTERVAL);"; then
 		db_error_logged=0
 	else
 		if [ "$db_error_logged" = "0" ]; then
@@ -197,9 +228,9 @@ while :; do
 		last_clean=$today
 	fi
 
-	state="$cn_ok$intl_ok"
+	state="$cn_ok$intl_ok$cn_direct_ok$intl_direct_ok"
 	if [ -z "$prev_state" ] || [ "$state" != "$prev_state" ]; then
-		log "ts=$ts cn_ok=$cn_ok (http=$cn_http_code) intl_ok=$intl_ok (http=$intl_http_code)"
+		log "ts=$ts cn_ok=$cn_ok (http=$cn_http_code) intl_ok=$intl_ok (http=$intl_http_code) cn_direct_ok=$cn_direct_ok (http=$cn_direct_http_code) intl_direct_ok=$intl_direct_ok (http=$intl_direct_http_code)"
 	fi
 	prev_state=$state
 

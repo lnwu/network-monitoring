@@ -38,6 +38,19 @@ load_interval() {
 	[ "$INTERVAL" -gt 86400 ] 2>/dev/null && INTERVAL=86400
 }
 
+ensure_direct_columns() {
+	[ -f "$DB" ] || return 0
+	for column in \
+		"cn_direct_http_code:INTEGER" "cn_direct_http_time:REAL" "cn_direct_ok:INTEGER" \
+		"intl_direct_http_code:INTEGER" "intl_direct_http_time:REAL" "intl_direct_ok:INTEGER"; do
+		name=${column%%:*}
+		type=${column#*:}
+		if ! sqlite3 "$DB" "SELECT $name FROM samples LIMIT 0;" >/dev/null 2>&1; then
+			sqlite3 "$DB" "ALTER TABLE samples ADD COLUMN $name $type DEFAULT NULL;" >/dev/null 2>&1 || return 1
+		fi
+	done
+}
+
 today() {
 	date +%F
 }
@@ -60,11 +73,16 @@ read -r INPUT || :
 
 case "$METHOD" in
 	status)
+		ensure_direct_columns
 		row=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "SELECT ts,
 			CASE WHEN cn_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END AS cn_ok,
 			CASE WHEN cn_http_code BETWEEN 200 AND 399 THEN ROUND(cn_http_time * 1000, 1) ELSE NULL END AS cn_latency_ms,
 			CASE WHEN intl_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END AS intl_ok,
-			CASE WHEN intl_http_code BETWEEN 200 AND 399 THEN ROUND(intl_http_time * 1000, 1) ELSE NULL END AS intl_latency_ms
+			CASE WHEN intl_http_code BETWEEN 200 AND 399 THEN ROUND(intl_http_time * 1000, 1) ELSE NULL END AS intl_latency_ms,
+			CASE WHEN cn_direct_http_code IS NULL THEN -1 WHEN cn_direct_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END AS cn_direct_ok,
+			CASE WHEN cn_direct_http_code BETWEEN 200 AND 399 THEN ROUND(cn_direct_http_time * 1000, 1) ELSE NULL END AS cn_direct_latency_ms,
+			CASE WHEN intl_direct_http_code IS NULL THEN -1 WHEN intl_direct_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END AS intl_direct_ok,
+			CASE WHEN intl_direct_http_code BETWEEN 200 AND 399 THEN ROUND(intl_direct_http_time * 1000, 1) ELSE NULL END AS intl_direct_latency_ms
 			FROM samples ORDER BY ts DESC LIMIT 1" 2>/dev/null)
 		if [ -n "$row" ]; then
 			row=${row#\[}
@@ -88,6 +106,7 @@ case "$METHOD" in
 		;;
 
 	history)
+		ensure_direct_columns
 		DATE=$(printf '%s' "$INPUT" | jsonfilter -e '@.date' 2>/dev/null)
 		case "$DATE" in
 			[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
@@ -100,8 +119,14 @@ case "$METHOD" in
 				CASE WHEN s.cn_http_code BETWEEN 200 AND 399 THEN ROUND(s.cn_http_time * 1000, 1) ELSE NULL END AS cn_latency_ms,
 				CASE WHEN s.intl_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END AS intl_ok,
 				CASE WHEN s.intl_http_code BETWEEN 200 AND 399 THEN ROUND(s.intl_http_time * 1000, 1) ELSE NULL END AS intl_latency_ms,
+				CASE WHEN s.cn_direct_http_code IS NULL THEN -1 WHEN s.cn_direct_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END AS cn_direct_ok,
+				CASE WHEN s.cn_direct_http_code BETWEEN 200 AND 399 THEN ROUND(s.cn_direct_http_time * 1000, 1) ELSE NULL END AS cn_direct_latency_ms,
+				CASE WHEN s.intl_direct_http_code IS NULL THEN -1 WHEN s.intl_direct_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END AS intl_direct_ok,
+				CASE WHEN s.intl_direct_http_code BETWEEN 200 AND 399 THEN ROUND(s.intl_direct_http_time * 1000, 1) ELSE NULL END AS intl_direct_latency_ms,
 				COALESCE((SELECT CASE WHEN p.cn_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END FROM samples p WHERE p.ts < s.ts ORDER BY p.ts DESC LIMIT 1), 1) AS prev_cn_ok,
-				COALESCE((SELECT CASE WHEN p.intl_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END FROM samples p WHERE p.ts < s.ts ORDER BY p.ts DESC LIMIT 1), 1) AS prev_intl_ok
+				COALESCE((SELECT CASE WHEN p.intl_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END FROM samples p WHERE p.ts < s.ts ORDER BY p.ts DESC LIMIT 1), 1) AS prev_intl_ok,
+				COALESCE((SELECT CASE WHEN p.cn_direct_http_code IS NULL THEN -1 WHEN p.cn_direct_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END FROM samples p WHERE p.ts < s.ts ORDER BY p.ts DESC LIMIT 1), -1) AS prev_cn_direct_ok,
+				COALESCE((SELECT CASE WHEN p.intl_direct_http_code IS NULL THEN -1 WHEN p.intl_direct_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END FROM samples p WHERE p.ts < s.ts ORDER BY p.ts DESC LIMIT 1), -1) AS prev_intl_direct_ok
 			FROM samples s
 			WHERE s.ts >= strftime('%s', '$DATE 00:00:00', 'utc')
 				AND s.ts < strftime('%s', '$DATE 00:00:00', '+1 day', 'utc')
@@ -111,6 +136,7 @@ case "$METHOD" in
 		;;
 
 	days)
+		ensure_direct_columns
 		load_interval
 		rows=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "
 			WITH base AS (
@@ -119,13 +145,18 @@ case "$METHOD" in
 					COALESCE(NULLIF(sample_interval, 0), $INTERVAL) AS sample_interval,
 					CASE WHEN cn_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END AS cn_ok,
 					CASE WHEN intl_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END AS intl_ok,
-					cn_http_time, intl_http_time
+					cn_http_time, intl_http_time,
+					CASE WHEN cn_direct_http_code IS NULL THEN NULL WHEN cn_direct_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END AS cn_direct_ok,
+					CASE WHEN intl_direct_http_code IS NULL THEN NULL WHEN intl_direct_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END AS intl_direct_ok,
+					cn_direct_http_time, intl_direct_http_time
 				FROM samples
 				WHERE ts >= (strftime('%s', 'now') - 370 * 86400)
 			), t AS (
 				SELECT *,
 					LAG(cn_ok, 1, 1) OVER (ORDER BY ts) AS p_cn,
 					LAG(intl_ok, 1, 1) OVER (ORDER BY ts) AS p_intl,
+					LAG(cn_direct_ok, 1, NULL) OVER (ORDER BY ts) AS p_cn_direct,
+					LAG(intl_direct_ok, 1, NULL) OVER (ORDER BY ts) AS p_intl_direct,
 					LEAD(ts) OVER (ORDER BY ts) AS next_ts
 				FROM base
 			)
@@ -133,14 +164,22 @@ case "$METHOD" in
 				COUNT(*) AS samples,
 				ROUND(AVG(cn_ok) * 100, 1) AS cn_avail,
 				ROUND(AVG(intl_ok) * 100, 1) AS intl_avail,
+				CASE WHEN COUNT(cn_direct_ok) > 0 THEN ROUND(AVG(cn_direct_ok) * 100, 1) END AS cn_direct_avail,
+				CASE WHEN COUNT(intl_direct_ok) > 0 THEN ROUND(AVG(intl_direct_ok) * 100, 1) END AS intl_direct_avail,
 				ROUND(AVG(CASE WHEN cn_ok = 1 AND cn_http_time > 0 THEN cn_http_time * 1000 END), 1) AS cn_avg,
 				ROUND(MAX(CASE WHEN cn_ok = 1 AND cn_http_time > 0 THEN cn_http_time * 1000 END), 1) AS cn_max,
 				ROUND(AVG(CASE WHEN intl_ok = 1 AND intl_http_time > 0 THEN intl_http_time * 1000 END), 1) AS intl_avg,
 				ROUND(MAX(CASE WHEN intl_ok = 1 AND intl_http_time > 0 THEN intl_http_time * 1000 END), 1) AS intl_max,
+				ROUND(AVG(CASE WHEN cn_direct_ok = 1 AND cn_direct_http_time > 0 THEN cn_direct_http_time * 1000 END), 1) AS cn_direct_avg,
+				ROUND(MAX(CASE WHEN cn_direct_ok = 1 AND cn_direct_http_time > 0 THEN cn_direct_http_time * 1000 END), 1) AS cn_direct_max,
+				ROUND(AVG(CASE WHEN intl_direct_ok = 1 AND intl_direct_http_time > 0 THEN intl_direct_http_time * 1000 END), 1) AS intl_direct_avg,
+				ROUND(MAX(CASE WHEN intl_direct_ok = 1 AND intl_direct_http_time > 0 THEN intl_direct_http_time * 1000 END), 1) AS intl_direct_max,
 				SUM(1 - cn_ok) AS cn_down,
 				SUM(1 - intl_ok) AS intl_down,
 				SUM(CASE WHEN cn_ok = 0 AND p_cn = 1 THEN 1 ELSE 0 END) AS cn_outages,
 				SUM(CASE WHEN intl_ok = 0 AND p_intl = 1 THEN 1 ELSE 0 END) AS intl_outages,
+				SUM(CASE WHEN cn_direct_ok = 0 AND p_cn_direct = 1 THEN 1 ELSE 0 END) AS cn_direct_outages,
+				SUM(CASE WHEN intl_direct_ok = 0 AND p_intl_direct = 1 THEN 1 ELSE 0 END) AS intl_direct_outages,
 				SUM(CASE WHEN cn_ok = 0 THEN
 					CASE WHEN next_ts IS NULL
 						THEN MAX(0, MIN(sample_interval, CAST(strftime('%s', 'now') AS INTEGER) - ts))
@@ -152,7 +191,19 @@ case "$METHOD" in
 						THEN MAX(0, MIN(sample_interval, CAST(strftime('%s', 'now') AS INTEGER) - ts))
 						WHEN next_ts <= ts THEN 0
 						ELSE MIN(sample_interval, next_ts - ts) END
-					ELSE 0 END) AS intl_down_secs
+					ELSE 0 END) AS intl_down_secs,
+				SUM(CASE WHEN cn_direct_ok = 0 THEN
+					CASE WHEN next_ts IS NULL
+						THEN MAX(0, MIN(sample_interval, CAST(strftime('%s', 'now') AS INTEGER) - ts))
+						WHEN next_ts <= ts THEN 0
+						ELSE MIN(sample_interval, next_ts - ts) END
+					ELSE 0 END) AS cn_direct_down_secs,
+				SUM(CASE WHEN intl_direct_ok = 0 THEN
+					CASE WHEN next_ts IS NULL
+						THEN MAX(0, MIN(sample_interval, CAST(strftime('%s', 'now') AS INTEGER) - ts))
+						WHEN next_ts <= ts THEN 0
+						ELSE MIN(sample_interval, next_ts - ts) END
+					ELSE 0 END) AS intl_direct_down_secs
 			FROM t
 			GROUP BY day
 			ORDER BY day DESC

@@ -78,8 +78,12 @@ return view.extend({
 
 			var cnOk = 0, intlOk = 0, cnSum = 0, cnCnt = 0, cnMax = 0,
 				intlSum = 0, intlCnt = 0, intlMax = 0,
+				cnDirectOk = 0, intlDirectOk = 0, cnDirectSamples = 0, intlDirectSamples = 0,
+				cnDirectSum = 0, cnDirectCnt = 0, cnDirectMax = 0,
+				intlDirectSum = 0, intlDirectCnt = 0, intlDirectMax = 0,
 				cnDown = 0, intlDown = 0, cnOut = 0, intlOut = 0,
-				cnDownSecs = 0, intlDownSecs = 0;
+				cnDirectOut = 0, intlDirectOut = 0,
+				cnDownSecs = 0, intlDownSecs = 0, cnDirectDownSecs = 0, intlDirectDownSecs = 0;
 
 			function sampleDuration(s, i) {
 				var sampleInterval = +s.sample_interval;
@@ -93,6 +97,7 @@ return view.extend({
 
 			samples.forEach(function(s, i) {
 				var c = +s.cn_ok, it = +s.intl_ok;
+				var cd = +s.cn_direct_ok, id = +s.intl_direct_ok;
 				var duration = sampleDuration(s, i);
 				if (c) cnOk++; else cnDown++;
 				if (it) intlOk++; else intlDown++;
@@ -105,8 +110,28 @@ return view.extend({
 				}
 				if (!c) cnDownSecs += duration;
 				if (!it) intlDownSecs += duration;
+				if (cd >= 0) {
+					cnDirectSamples++;
+					if (cd) cnDirectOk++;
+					if (i > 0 ? +samples[i - 1].cn_direct_ok >= 0 : +s.prev_cn_direct_ok >= 0) {
+						var prevCd = i > 0 ? +samples[i - 1].cn_direct_ok : +s.prev_cn_direct_ok;
+						if (!cd && prevCd) cnDirectOut++;
+					}
+					if (!cd) cnDirectDownSecs += duration;
+				}
+				if (id >= 0) {
+					intlDirectSamples++;
+					if (id) intlDirectOk++;
+					if (i > 0 ? +samples[i - 1].intl_direct_ok >= 0 : +s.prev_intl_direct_ok >= 0) {
+						var prevId = i > 0 ? +samples[i - 1].intl_direct_ok : +s.prev_intl_direct_ok;
+						if (!id && prevId) intlDirectOut++;
+					}
+					if (!id) intlDirectDownSecs += duration;
+				}
 				if (c && +s.cn_latency_ms > 0) { cnSum += +s.cn_latency_ms; cnCnt++; if (+s.cn_latency_ms > cnMax) cnMax = +s.cn_latency_ms; }
 				if (it && +s.intl_latency_ms > 0) { intlSum += +s.intl_latency_ms; intlCnt++; if (+s.intl_latency_ms > intlMax) intlMax = +s.intl_latency_ms; }
+				if (cd === 1 && +s.cn_direct_latency_ms > 0) { cnDirectSum += +s.cn_direct_latency_ms; cnDirectCnt++; if (+s.cn_direct_latency_ms > cnDirectMax) cnDirectMax = +s.cn_direct_latency_ms; }
+				if (id === 1 && +s.intl_direct_latency_ms > 0) { intlDirectSum += +s.intl_direct_latency_ms; intlDirectCnt++; if (+s.intl_direct_latency_ms > intlDirectMax) intlDirectMax = +s.intl_direct_latency_ms; }
 			});
 
 			summaryBox.appendChild(statCard(_('Domestic availability'), (100 * cnOk / samples.length).toFixed(1) + '%'));
@@ -117,17 +142,27 @@ return view.extend({
 				(intlCnt ? (intlSum / intlCnt).toFixed(1) : '-') + ' / ' + (intlMax ? intlMax.toFixed(1) : '-') + ' ms'));
 			summaryBox.appendChild(statCard(_('Outages (domestic / international)'),
 				'%s (%s) / %s (%s)'.format(cnOut, fmtDur(cnDownSecs), intlOut, fmtDur(intlDownSecs))));
+			summaryBox.appendChild(statCard(_('Domestic direct availability'), cnDirectSamples ? (100 * cnDirectOk / cnDirectSamples).toFixed(1) + '%' : '-'));
+			summaryBox.appendChild(statCard(_('International direct availability'), intlDirectSamples ? (100 * intlDirectOk / intlDirectSamples).toFixed(1) + '%' : '-'));
+			summaryBox.appendChild(statCard(_('Domestic direct latency (avg / max)'),
+				(cnDirectCnt ? (cnDirectSum / cnDirectCnt).toFixed(1) : '-') + ' / ' + (cnDirectMax ? cnDirectMax.toFixed(1) : '-') + ' ms'));
+			summaryBox.appendChild(statCard(_('International direct latency (avg / max)'),
+				(intlDirectCnt ? (intlDirectSum / intlDirectCnt).toFixed(1) : '-') + ' / ' + (intlDirectMax ? intlDirectMax.toFixed(1) : '-') + ' ms'));
+			summaryBox.appendChild(statCard(_('Outages (domestic direct / international direct)'),
+				'%s (%s) / %s (%s)'.format(cnDirectOut, fmtDur(cnDirectDownSecs), intlDirectOut, fmtDur(intlDirectDownSecs))));
 
 			chartBox.innerHTML = chartSVG(samples);
 		}
 
 		function chartSVG(samples) {
-			var W = 960, H = 300, padL = 48, padR = 12, padT = 14, padB = 28;
+			var W = 960, H = 300, padL = 48, padR = 12, padT = 30, padB = 28;
 			var maxV = 100;
 
 			samples.forEach(function(s) {
 				if (+s.cn_latency_ms > maxV) maxV = +s.cn_latency_ms;
 				if (+s.intl_latency_ms > maxV) maxV = +s.intl_latency_ms;
+				if (+s.cn_direct_latency_ms > maxV) maxV = +s.cn_direct_latency_ms;
+				if (+s.intl_direct_latency_ms > maxV) maxV = +s.intl_direct_latency_ms;
 			});
 			maxV = Math.min(Math.ceil(maxV * 1.15 / 50) * 50, 3000);
 
@@ -145,6 +180,10 @@ return view.extend({
 				if (+s.cn_ok === 0 || +s.intl_ok === 0) {
 					p.push('<rect x="' + (x(s.ts) - 0.5).toFixed(2) + '" y="' + padT +
 						'" width="1.6" height="' + (H - padT - padB) + '" fill="rgba(217,83,79,0.4)"/>');
+				}
+				if (+s.cn_direct_ok === 0 || +s.intl_direct_ok === 0) {
+					p.push('<rect x="' + (x(s.ts) + 0.5).toFixed(2) + '" y="' + padT +
+						'" width="1.6" height="' + (H - padT - padB) + '" fill="rgba(230,126,34,0.35)"/>');
 				}
 			});
 
@@ -173,14 +212,18 @@ return view.extend({
 
 			p.push(line('#2e6da4', 'cn_ok', 'cn_latency_ms'));
 			p.push(line('#3c9248', 'intl_ok', 'intl_latency_ms'));
+			p.push(line('#e67e22', 'cn_direct_ok', 'cn_direct_latency_ms'));
+			p.push(line('#8e44ad', 'intl_direct_ok', 'intl_direct_latency_ms'));
 
 			/* legend */
-			p.push('<line x1="' + (W - 260) + '" y1="6" x2="' + (W - 240) + '" y2="6" stroke="#2e6da4" stroke-width="3"/>' +
-				'<text x="' + (W - 234) + '" y="10" font-size="11" fill="#555">' + _('Domestic') + '</text>');
-			p.push('<line x1="' + (W - 170) + '" y1="6" x2="' + (W - 150) + '" y2="6" stroke="#3c9248" stroke-width="3"/>' +
-				'<text x="' + (W - 144) + '" y="10" font-size="11" fill="#555">' + _('International') + '</text>');
-			p.push('<rect x="' + (W - 60) + '" y="2" width="10" height="8" fill="rgba(217,83,79,0.5)"/>' +
-				'<text x="' + (W - 46) + '" y="10" font-size="11" fill="#555">' + _('Outage') + '</text>');
+			p.push('<line x1="' + (W - 440) + '" y1="8" x2="' + (W - 420) + '" y2="8" stroke="#2e6da4" stroke-width="3"/>' +
+				'<text x="' + (W - 414) + '" y="12" font-size="11" fill="#555">' + _('Domestic') + '</text>');
+			p.push('<line x1="' + (W - 300) + '" y1="8" x2="' + (W - 280) + '" y2="8" stroke="#3c9248" stroke-width="3"/>' +
+				'<text x="' + (W - 274) + '" y="12" font-size="11" fill="#555">' + _('International') + '</text>');
+			p.push('<line x1="' + (W - 440) + '" y1="22" x2="' + (W - 420) + '" y2="22" stroke="#e67e22" stroke-width="3"/>' +
+				'<text x="' + (W - 414) + '" y="26" font-size="11" fill="#555">' + _('Domestic direct') + '</text>');
+			p.push('<line x1="' + (W - 300) + '" y1="22" x2="' + (W - 280) + '" y2="22" stroke="#8e44ad" stroke-width="3"/>' +
+				'<text x="' + (W - 274) + '" y="26" font-size="11" fill="#555">' + _('International direct') + '</text>');
 
 			return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto" xmlns="http://www.w3.org/2000/svg">' + p.join('') + '</svg>';
 		}
@@ -248,15 +291,21 @@ return view.extend({
 		container.appendChild(message);
 
 		/* ---------- all-days table ---------- */
-		var table = E('table', { 'class': 'table', 'style': 'margin-top:16px' });
+		var table = E('table', { 'class': 'table', 'style': 'margin-top:16px;min-width:1100px' });
 		table.appendChild(E('tr', { 'class': 'tr table-titles' }, [
 			E('th', { 'class': 'th' }, _('Date')),
 			E('th', { 'class': 'th' }, _('Domestic avail.')),
 			E('th', { 'class': 'th' }, _('Intl. avail.')),
+			E('th', { 'class': 'th' }, _('Domestic direct avail.')),
+			E('th', { 'class': 'th' }, _('Intl. direct avail.')),
 			E('th', { 'class': 'th' }, _('Domestic avg/max (ms)')),
 			E('th', { 'class': 'th' }, _('Intl. avg/max (ms)')),
+			E('th', { 'class': 'th' }, _('Domestic direct avg/max (ms)')),
+			E('th', { 'class': 'th' }, _('Intl. direct avg/max (ms)')),
 			E('th', { 'class': 'th' }, _('Outages (domestic)')),
-			E('th', { 'class': 'th' }, _('Outages (intl.)'))
+			E('th', { 'class': 'th' }, _('Outages (intl.)')),
+			E('th', { 'class': 'th' }, _('Outages (domestic direct)')),
+			E('th', { 'class': 'th' }, _('Outages (intl. direct)'))
 		]));
 
 		days.forEach(function(d) {
@@ -267,10 +316,13 @@ return view.extend({
 				loadDay(d.day);
 				window.scrollTo({ top: 0, behavior: 'smooth' });
 			}});
-			[d.day, pct(d.cn_avail), pct(d.intl_avail),
+			[d.day, pct(d.cn_avail), pct(d.intl_avail), pct(d.cn_direct_avail), pct(d.intl_direct_avail),
 				num(d.cn_avg) + ' / ' + num(d.cn_max), num(d.intl_avg) + ' / ' + num(d.intl_max),
+				num(d.cn_direct_avg) + ' / ' + num(d.cn_direct_max), num(d.intl_direct_avg) + ' / ' + num(d.intl_direct_max),
 				'%s (%s)'.format(num(d.cn_outages), fmtDur(d.cn_down_secs)),
-				'%s (%s)'.format(num(d.intl_outages), fmtDur(d.intl_down_secs))
+				'%s (%s)'.format(num(d.intl_outages), fmtDur(d.intl_down_secs)),
+				'%s (%s)'.format(num(d.cn_direct_outages), fmtDur(d.cn_direct_down_secs)),
+				'%s (%s)'.format(num(d.intl_direct_outages), fmtDur(d.intl_direct_down_secs))
 			].forEach(function(v) {
 				row.appendChild(E('td', { 'class': 'td' }, String(v)));
 			});
@@ -278,7 +330,9 @@ return view.extend({
 		});
 
 		container.appendChild(E('h3', {}, _('All Recorded Days')));
-		container.appendChild(days.length ? table : E('p', {}, _('No recorded days yet.')));
+		var tableWrap = E('div', { 'style': 'overflow-x:auto' });
+		tableWrap.appendChild(table);
+		container.appendChild(days.length ? tableWrap : E('p', {}, _('No recorded days yet.')));
 
 		loadDay(todayStr);
 

@@ -28,7 +28,7 @@ return view.extend({
 		o = s.option(form.Value, 'cn_http_target', _('Domestic HTTP target'));
 		o.placeholder = 'https://www.baidu.com';
 
-		o = s.option(form.Value, 'intl_http_target', _('International HTTP target (via proxy)'));
+		o = s.option(form.Value, 'intl_http_target', _('Foreign HTTP target'));
 		o.placeholder = 'https://www.google.com/generate_204';
 
 		return m.render();

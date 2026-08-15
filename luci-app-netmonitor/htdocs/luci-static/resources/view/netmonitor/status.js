@@ -14,7 +14,7 @@ return view.extend({
 
 	render: function(data) {
 		var container = E('div');
-		var grid = E('div', { 'style': 'display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px' });
+		var grid = E('div', { 'style': 'display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px' });
 
 		container.appendChild(E('h2', {}, _('Realtime Connectivity')));
 		container.appendChild(grid);
@@ -34,6 +34,8 @@ return view.extend({
 			grid.innerHTML = '';
 			grid.appendChild(card(_('Domestic'), s ? +s.cn_ok : -1, s && s.cn_latency_ms));
 			grid.appendChild(card(_('Foreign'), s ? +s.intl_ok : -1, s && s.intl_latency_ms));
+			grid.appendChild(card(_('Domestic direct'), s ? +s.cn_direct_ok : -1, s && s.cn_direct_latency_ms));
+			grid.appendChild(card(_('International direct'), s ? +s.intl_direct_ok : -1, s && s.intl_direct_latency_ms));
 		}
 
 		draw(data);

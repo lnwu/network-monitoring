@@ -19,6 +19,12 @@ msgstr "国内"
 msgid "Foreign"
 msgstr "国外"
 
+msgid "Domestic direct"
+msgstr "国内直连"
+
+msgid "International direct"
+msgstr "国际直连"
+
 msgid "Latency: %s ms"
 msgstr "延时：%s ms"
 
@@ -64,17 +70,50 @@ msgstr "国内可用率"
 msgid "Intl. avail."
 msgstr "国际可用率"
 
+msgid "Domestic direct avail."
+msgstr "国内直连可用率"
+
+msgid "Intl. direct avail."
+msgstr "国际直连可用率"
+
 msgid "Domestic avg/max (ms)"
 msgstr "国内平均/最大延时（毫秒）"
 
 msgid "Intl. avg/max (ms)"
 msgstr "国际平均/最大延时（毫秒）"
 
+msgid "Domestic direct avg/max (ms)"
+msgstr "国内直连平均/最大延时（毫秒）"
+
+msgid "Intl. direct avg/max (ms)"
+msgstr "国际直连平均/最大延时（毫秒）"
+
 msgid "Outages (domestic)"
 msgstr "中断次数（国内）"
 
 msgid "Outages (intl.)"
 msgstr "中断次数（国际）"
+
+msgid "Outages (domestic direct)"
+msgstr "中断次数（国内直连）"
+
+msgid "Outages (intl. direct)"
+msgstr "中断次数（国际直连）"
+
+msgid "Domestic direct availability"
+msgstr "国内直连可用率"
+
+msgid "International direct availability"
+msgstr "国际直连可用率"
+
+msgid "Domestic direct latency (avg / max)"
+msgstr "国内直连平均/最大延时（毫秒）"
+
+msgid "International direct latency (avg / max)"
+msgstr "国际直连平均/最大延时（毫秒）"
+
+msgid "Outages (domestic direct / international direct)"
+msgstr "中断次数（国内直连 / 国际直连）"
 
 msgid "All Recorded Days"
 msgstr "全部记录日期"
@@ -121,8 +160,8 @@ msgstr "HTTP 超时（秒）"
 msgid "Domestic HTTP target"
 msgstr "国内 HTTP 目标"
 
-msgid "International HTTP target (via proxy)"
-msgstr "国际 HTTP 目标（经代理）"
+msgid "Foreign HTTP target"
+msgstr "国外 HTTP 目标"
 
 msgid "Network Monitor"
 msgstr "网络监控"
