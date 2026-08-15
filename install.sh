@@ -88,4 +88,4 @@ apk add --allow-untrusted "$TMPDIR/netmonitor.ipk" "$TMPDIR/luci-app-netmonitor.
 /etc/init.d/netmonitor enable
 /etc/init.d/netmonitor start
 
-echo "安装完成, 请访问 LuCI -> 网络 -> Network Monitor"
+echo "安装完成, 请访问 LuCI -> 网络 -> 网络监控"
