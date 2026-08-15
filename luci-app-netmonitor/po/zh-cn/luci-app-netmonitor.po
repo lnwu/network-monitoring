@@ -34,11 +34,14 @@ msgstr "国际（经代理）"
 msgid "Ping %s: %s ms, loss: %s%% (ICMP, usually not proxied)"
 msgstr "Ping %s: %s ms, 丢包 %s%% (ICMP, 通常不经过代理)"
 
-msgid "International direct (bypass proxy)"
-msgstr "国际直连（绕过代理）"
+msgid "International direct (WAN interface reference)"
+msgstr "国际直连（WAN 接口参考）"
 
 msgid "May always fail from mainland China; reference only"
 msgstr "国内线路下可能始终失败，仅作参考"
+
+msgid "Direct check unavailable"
+msgstr "直连检测不可用"
 
 msgid "Broadband / modem link appears DOWN"
 msgstr "宽带 / 光猫链路疑似中断"
@@ -160,8 +163,8 @@ msgstr "国际 Ping 目标（IP，通常不经过代理）"
 msgid "Enable direct international reference check"
 msgstr "启用国际直连参考检测"
 
-msgid "Tries to reach an international target bypassing the proxy by binding to the WAN interface. From mainland China this may always fail depending on the line; useful as a reference only."
-msgstr "通过绑定 WAN 接口绕过代理访问国际目标。国内线路下可能始终失败，仅作参考。"
+msgid "Tries to reach an international target by binding to the WAN interface. This does not guarantee bypassing transparent proxies. From mainland China this may always fail depending on the line; useful as a reference only."
+msgstr "通过绑定 WAN 接口访问国际目标，但不保证绕过透明代理。国内线路下可能始终失败，仅作参考。"
 
 msgid "Direct check HTTP target"
 msgstr "直连检测 HTTP 目标"

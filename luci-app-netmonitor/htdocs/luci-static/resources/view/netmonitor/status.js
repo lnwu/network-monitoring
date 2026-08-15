@@ -1,11 +1,20 @@
 'use strict';
+'require view';
+'require rpc';
+'require uci';
+'require poll';
+
+var callStatus = rpc.declare({ object: 'netmonitor', method: 'status' });
+
 return view.extend({
 	title: _('Network Status'),
 
 	load: function() {
 		return Promise.all([
-			L.resolveDefault(L.ubus.call('netmonitor', 'status'), null),
-			L.resolveDefault(L.uci.get('netmonitor'), {})
+			L.resolveDefault(callStatus(), null),
+			uci.load('netmonitor').then(function() {
+				return { main: uci.get('netmonitor', 'main') || {} };
+			})
 		]);
 	},
 
@@ -13,6 +22,7 @@ return view.extend({
 		var cfg = (data[1] && data[1].main) || {};
 		var cnTarget = cfg.cn_ping_target || 'baidu.com';
 		var intlTarget = cfg.intl_ping_target || '8.8.8.8';
+		var directEnabled = cfg.direct_enabled !== '0';
 		var container = E('div');
 		var grid = E('div', { 'style': 'display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px' });
 
@@ -52,10 +62,14 @@ return view.extend({
 				_('Checked at: %s').format(t)
 			]));
 
-			grid.appendChild(card(_('International direct (bypass proxy)'), +s.direct_ok, [
-				_('HTTP status: %s (%ss)').format(s.direct_http_code, (+s.direct_http_time).toFixed(2)),
-				_('May always fail from mainland China; reference only')
-			]));
+			if (directEnabled) {
+				var directChecked = s.direct_checked == null || +s.direct_checked === 1;
+				grid.appendChild(card(_('International direct (WAN interface reference)'), directChecked ? +s.direct_ok : -1,
+					directChecked ? [
+						_('HTTP status: %s (%ss)').format(s.direct_http_code, (+s.direct_http_time).toFixed(2)),
+						_('May always fail from mainland China; reference only')
+					] : [ _('Direct check unavailable') ]));
+			}
 
 			var verdict, vok;
 			if (+s.cn_ok === 0) {
@@ -63,7 +77,7 @@ return view.extend({
 				vok = 0;
 			}
 			else if (+s.intl_ok === 0) {
-				if (+s.direct_ok === 1) {
+				if (directEnabled && +s.direct_ok === 1) {
 					verdict = _('Domestic OK, international DOWN, but direct link works - proxy (OpenClash) likely dead');
 				}
 				else {
@@ -83,12 +97,12 @@ return view.extend({
 
 		var pollFn = function() {
 			if (!document.contains(container)) {
-				L.Poll.remove(pollFn);
+				poll.remove(pollFn);
 				return null;
 			}
-			return L.resolveDefault(L.ubus.call('netmonitor', 'status'), {}).then(draw);
+			return L.resolveDefault(callStatus(), {}).then(draw);
 		};
-		L.Poll.add(pollFn, 10);
+		poll.add(pollFn, 10);
 
 		return container;
 	}

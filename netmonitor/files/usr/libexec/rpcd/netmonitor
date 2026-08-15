@@ -7,6 +7,26 @@ DB=/etc/netmonitor/history.db
 
 DATE_RE='^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$'
 
+normalize_uint() {
+	local value fallback
+	value=$1
+	fallback=$2
+	case "$value" in
+		'' | *[!0-9]*) printf '%s' "$fallback"; return ;;
+	esac
+	value=$(printf '%s' "$value" | sed 's/^0*//')
+	[ -n "$value" ] || value=0
+	printf '%s' "$value"
+}
+
+load_interval() {
+	config_load netmonitor
+	config_get INTERVAL main interval 30
+	INTERVAL=$(normalize_uint "$INTERVAL" 30)
+	[ "$INTERVAL" -lt 10 ] 2>/dev/null && INTERVAL=10
+	[ "$INTERVAL" -gt 86400 ] 2>/dev/null && INTERVAL=86400
+}
+
 today() {
 	date +%F
 }
@@ -29,7 +49,10 @@ read -r INPUT || :
 
 case "$METHOD" in
 	status)
-		row=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "SELECT * FROM samples ORDER BY ts DESC LIMIT 1" 2>/dev/null)
+		row=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "SELECT ts, cn_ping, cn_loss, cn_http_code, cn_http_time, cn_ok,
+			intl_ping, intl_loss, intl_http_code, intl_http_time, intl_ok,
+			direct_http_code, direct_http_time, direct_ok, direct_checked
+			FROM samples ORDER BY ts DESC LIMIT 1" 2>/dev/null)
 		if [ -n "$row" ]; then
 			printf '%s' "$row" | sed 's/^\[//; s/\]$//'
 			echo
@@ -43,9 +66,7 @@ case "$METHOD" in
 		if ! printf '%s' "$DATE" | grep -q "$DATE_RE"; then
 			DATE=$(today)
 		fi
-		config_load netmonitor
-		config_get INTERVAL main interval 30
-		case "$INTERVAL" in '' | *[!0-9]*) INTERVAL=30 ;; esac
+		load_interval
 		samples=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "SELECT ts, cn_ping, cn_loss, cn_http_code, cn_http_time, cn_ok,
 				intl_ping, intl_loss, intl_http_code, intl_http_time, intl_ok,
 				direct_http_code, direct_http_time, direct_ok
@@ -57,13 +78,15 @@ case "$METHOD" in
 		;;
 
 	days)
+		load_interval
 		rows=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "
 			WITH t AS (
 				SELECT ts,
 					date(ts, 'unixepoch', 'localtime') AS day,
 					cn_ok, intl_ok, cn_ping, intl_ping,
 					LAG(cn_ok, 1, 1) OVER (ORDER BY ts) AS p_cn,
-					LAG(intl_ok, 1, 1) OVER (ORDER BY ts) AS p_intl
+					LAG(intl_ok, 1, 1) OVER (ORDER BY ts) AS p_intl,
+					LEAD(ts) OVER (ORDER BY ts) AS next_ts
 				FROM samples
 				WHERE ts >= (strftime('%s', 'now') - 370 * 86400)
 			)
@@ -79,8 +102,14 @@ case "$METHOD" in
 				SUM(1 - intl_ok) AS intl_down,
 				SUM(CASE WHEN cn_ok = 0 AND p_cn = 1 THEN 1 ELSE 0 END) AS cn_outages,
 				SUM(CASE WHEN intl_ok = 0 AND p_intl = 1 THEN 1 ELSE 0 END) AS intl_outages,
-				ROUND(SUM(1 - cn_ok) * 1.0 * (MAX(ts) - MIN(ts)) / COUNT(*)) AS cn_down_secs,
-				ROUND(SUM(1 - intl_ok) * 1.0 * (MAX(ts) - MIN(ts)) / COUNT(*)) AS intl_down_secs
+				SUM(CASE WHEN cn_ok = 0 THEN
+					CASE WHEN next_ts IS NULL OR next_ts <= ts OR next_ts - ts > $INTERVAL
+						THEN $INTERVAL ELSE next_ts - ts END
+					ELSE 0 END) AS cn_down_secs,
+				SUM(CASE WHEN intl_ok = 0 THEN
+					CASE WHEN next_ts IS NULL OR next_ts <= ts OR next_ts - ts > $INTERVAL
+						THEN $INTERVAL ELSE next_ts - ts END
+					ELSE 0 END) AS intl_down_secs
 			FROM t
 			GROUP BY day
 			ORDER BY day DESC

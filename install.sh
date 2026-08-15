@@ -2,7 +2,7 @@
 set -e
 
 REPO=lnwu/network-monitoring
-MIN_VERSION=24.10
+MIN_VERSION=25.12
 
 if [ ! -f /etc/openwrt_release ]; then
 	echo "错误: 未找到 /etc/openwrt_release, 请确认当前系统为 OpenWrt"
@@ -26,7 +26,7 @@ case "$DISTRIB_RELEASE" in
 			echo "错误: 无法解析 OpenWrt 版本号: $DISTRIB_RELEASE"
 			exit 1
 		fi
-		if [ "$MAJOR" -lt 24 ] || { [ "$MAJOR" -eq 24 ] && [ "$MINOR" -lt 10 ]; }; then
+		if [ "$MAJOR" -lt 25 ] || { [ "$MAJOR" -eq 25 ] && [ "$MINOR" -lt 12 ]; }; then
 			echo "错误: 需要 OpenWrt $MIN_VERSION 及以上版本 (当前: $DISTRIB_RELEASE)"
 			exit 1
 		fi
@@ -39,7 +39,7 @@ if ! command -v apk >/dev/null 2>&1; then
 fi
 
 MISSING_PKGS=""
-for item in "curl:curl" "sqlite3:sqlite3-cli" "jsonfilter:jsonfilter"; do
+for item in "curl:curl" "sqlite3:sqlite3-cli" "jsonfilter:jsonfilter" "sha256sum:busybox"; do
 	cmd=${item%%:*}
 	pkg=${item#*:}
 	if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -54,18 +54,28 @@ if [ -n "$MISSING_PKGS" ]; then
 fi
 
 BASE_URL="https://github.com/$REPO/releases/latest/download"
+TMPDIR=$(mktemp -d /tmp/netmonitor-install.XXXXXX)
+trap 'rm -rf "$TMPDIR"' EXIT
+
+curl -Lf --retry 3 --retry-delay 2 --connect-timeout 15 --max-time 120 \
+	"$BASE_URL/SHA256SUMS" -o "$TMPDIR/SHA256SUMS"
 
 for p in netmonitor luci-app-netmonitor; do
 	echo "下载 $p ..."
-	curl -Lf "$BASE_URL/$p.ipk" -o "/tmp/$p.ipk"
+	curl -Lf --retry 3 --retry-delay 2 --connect-timeout 15 --max-time 120 \
+		"$BASE_URL/$p.ipk" -o "$TMPDIR/$p.ipk"
+	expected=$(awk -v name="$p.ipk" '$2 == name { print $1 }' "$TMPDIR/SHA256SUMS")
+	actual=$(sha256sum "$TMPDIR/$p.ipk" | awk '{ print $1 }')
+	if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
+		echo "错误: $p 校验失败"
+		exit 1
+	fi
 done
 
-apk add --allow-untrusted /tmp/netmonitor.ipk /tmp/luci-app-netmonitor.ipk
+apk add --allow-untrusted "$TMPDIR/netmonitor.ipk" "$TMPDIR/luci-app-netmonitor.ipk"
 
 /etc/init.d/rpcd restart
 /etc/init.d/netmonitor enable
 /etc/init.d/netmonitor start
-
-rm -rf /tmp/netmonitor.ipk /tmp/luci-app-netmonitor.ipk
 
 echo "安装完成, 请访问 LuCI -> 网络 -> Network Monitor"

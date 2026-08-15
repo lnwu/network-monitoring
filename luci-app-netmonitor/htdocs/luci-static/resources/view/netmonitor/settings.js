@@ -1,4 +1,7 @@
 'use strict';
+'require view';
+'require form';
+
 return view.extend({
 	title: _('Network Monitor Settings'),
 
@@ -44,7 +47,7 @@ return view.extend({
 		o.placeholder = '8.8.8.8';
 
 		o = s.option(form.Flag, 'direct_enabled', _('Enable direct international reference check'),
-			_('Tries to reach an international target bypassing the proxy by binding to the WAN interface. ' +
+			_('Tries to reach an international target by binding to the WAN interface. This does not guarantee bypassing transparent proxies. ' +
 				'From mainland China this may always fail depending on the line; useful as a reference only.'));
 
 		o = s.option(form.Value, 'direct_http_target', _('Direct check HTTP target'));

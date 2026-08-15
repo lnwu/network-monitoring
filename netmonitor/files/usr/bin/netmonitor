@@ -5,8 +5,6 @@
 
 DB_DIR=/etc/netmonitor
 DB="$DB_DIR/history.db"
-WORKDIR=/tmp/netmonitor
-
 INTERVAL=30
 RETENTION=30
 PING_COUNT=3
@@ -19,6 +17,49 @@ INTL_PING='8.8.8.8'
 DIRECT_HTTP='https://www.cloudflare.com/cdn-cgi/trace'
 DIRECT_ENABLED=1
 WAN_IF=
+
+normalize_uint() {
+	local value fallback
+	value=$1
+	fallback=$2
+	case "$value" in
+		'' | *[!0-9]*) printf '%s' "$fallback"; return ;;
+	esac
+	value=$(printf '%s' "$value" | sed 's/^0*//')
+	[ -n "$value" ] || value=0
+	printf '%s' "$value"
+}
+
+clamp_uint() {
+	local value min max fallback
+	value=$(normalize_uint "$1" "$4")
+	min=$2
+	max=$3
+	[ "$value" -lt "$min" ] 2>/dev/null && value=$min
+	[ "$value" -gt "$max" ] 2>/dev/null && value=$max
+	printf '%s' "$value"
+}
+
+valid_http_target() {
+	case "$1" in
+		http://* | https://*) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+valid_host_target() {
+	case "$1" in
+		'' | -* | *[!A-Za-z0-9._:-]*) return 1 ;;
+		*) return 0 ;;
+	esac
+}
+
+valid_interface() {
+	case "$1" in
+		'' | auto | *[!A-Za-z0-9_.-]*) return 1 ;;
+		*) return 0 ;;
+	esac
+}
 
 load_config() {
 	config_load netmonitor
@@ -34,13 +75,30 @@ load_config() {
 	config_get DIRECT_HTTP main direct_http_target "$DIRECT_HTTP"
 	config_get DIRECT_ENABLED main direct_enabled "$DIRECT_ENABLED"
 	config_get WAN_IF main wan_interface "$WAN_IF"
+
+	INTERVAL=$(clamp_uint "$INTERVAL" 10 86400 30)
+	RETENTION=$(clamp_uint "$RETENTION" 1 366 30)
+	PING_COUNT=$(clamp_uint "$PING_COUNT" 1 10 3)
+	TIMEOUT=$(clamp_uint "$TIMEOUT" 2 60 8)
+	case "$LOG_ALL" in 1) ;; *) LOG_ALL=0 ;; esac
+	case "$DIRECT_ENABLED" in 1) ;; *) DIRECT_ENABLED=0 ;; esac
+	[ -n "$CN_HTTP" ] || CN_HTTP='https://www.baidu.com'
+	[ -n "$CN_PING" ] || CN_PING='baidu.com'
+	[ -n "$INTL_HTTP" ] || INTL_HTTP='https://www.google.com/generate_204'
+	[ -n "$INTL_PING" ] || INTL_PING='8.8.8.8'
+	[ -n "$DIRECT_HTTP" ] || DIRECT_HTTP='https://www.cloudflare.com/cdn-cgi/trace'
+	valid_http_target "$CN_HTTP" || CN_HTTP='https://www.baidu.com'
+	valid_host_target "$CN_PING" || CN_PING='baidu.com'
+	valid_http_target "$INTL_HTTP" || INTL_HTTP='https://www.google.com/generate_204'
+	valid_host_target "$INTL_PING" || INTL_PING='8.8.8.8'
+	valid_http_target "$DIRECT_HTTP" || DIRECT_HTTP='https://www.cloudflare.com/cdn-cgi/trace'
+	valid_interface "$WAN_IF" || WAN_IF=auto
 }
 
 detect_wan() {
 	local dev
 	dev=$(ubus call network.interface.wan status 2>/dev/null | jsonfilter -e '@.l3_device' 2>/dev/null)
-	[ -n "$dev" ] || dev='pppoe-wan'
-	echo "$dev"
+	[ -n "$dev" ] && echo "$dev"
 }
 
 # Resolve a domain via dnsmasq and return the first non-fake-ip answer
@@ -82,8 +140,13 @@ do_http() {
 }
 
 init_db() {
-	mkdir -p "$DB_DIR"
-	sqlite3 "$DB" "CREATE TABLE IF NOT EXISTS samples (
+	if ! mkdir -p "$DB_DIR"; then
+		return 1
+	fi
+	if ! chmod 700 "$DB_DIR"; then
+		return 1
+	fi
+	if ! sqlite3 "$DB" "CREATE TABLE IF NOT EXISTS samples (
 		ts INTEGER PRIMARY KEY,
 		cn_ping REAL DEFAULT 0,
 		cn_loss REAL DEFAULT 100,
@@ -97,31 +160,52 @@ init_db() {
 		intl_ok INTEGER DEFAULT 0,
 		direct_http_code INTEGER DEFAULT 0,
 		direct_http_time REAL DEFAULT 0,
-		direct_ok INTEGER DEFAULT 0
-	);"
-	sqlite3 "$DB" "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000;"
+		direct_ok INTEGER DEFAULT 0,
+		direct_checked INTEGER DEFAULT 0
+	);"; then
+		return 1
+	fi
+	if ! sqlite3 "$DB" "SELECT direct_checked FROM samples LIMIT 0;" >/dev/null 2>&1; then
+		if ! sqlite3 "$DB" "ALTER TABLE samples ADD COLUMN direct_checked INTEGER DEFAULT 0;" >/dev/null 2>&1; then
+			return 1
+		fi
+	fi
+	if ! chmod 600 "$DB"; then
+		return 1
+	fi
+	sqlite3 "$DB" "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000;" >/dev/null
 }
 
 log() {
 	logger -t netmonitor -s "$1"
 }
 
-init_db
+umask 077
+if ! init_db; then
+	log "database initialization failed"
+	exit 1
+fi
+
+for dependency in curl sqlite3 jsonfilter nslookup ping; do
+	if ! command -v "$dependency" >/dev/null 2>&1; then
+		log "missing dependency: $dependency"
+		exit 1
+	fi
+done
 
 WAN_DEV=
 last_clean=
 prev_state=
-wan_if_prev=
+db_error_logged=0
+WORKDIR=$(mktemp -d /tmp/netmonitor.XXXXXX) || {
+	log "cannot create temporary directory"
+	exit 1
+}
 trap 'rm -rf "$WORKDIR"' EXIT
 trap 'exit 0' INT TERM
 
 while :; do
 	load_config
-
-	if [ "$WAN_IF" != "$wan_if_prev" ]; then
-		WAN_DEV=
-		wan_if_prev=$WAN_IF
-	fi
 
 	ts=$(date +%s)
 	mkdir -p "$WORKDIR"
@@ -154,7 +238,7 @@ while :; do
 	if [ "$DIRECT_ENABLED" = "1" ]; then
 		if [ -n "$WAN_IF" ] && [ "$WAN_IF" != "auto" ]; then
 			WAN_DEV=$WAN_IF
-		elif [ -z "$WAN_DEV" ]; then
+		else
 			WAN_DEV=$(detect_wan)
 		fi
 		if [ -n "$WAN_DEV" ]; then
@@ -183,25 +267,38 @@ while :; do
 	# HTTP through the proxy is authoritative for intl availability
 	intl_ok=$intl_http_ok
 
-	direct_ok=0 direct_http_code=0 direct_http_time=0
+	direct_checked=0 direct_ok=0 direct_http_code=0 direct_http_time=0
 	if [ "$direct_job" = "1" ]; then
 		set -- $(cat "$WORKDIR/direct" 2>/dev/null)
 		direct_ok=${1:-0} direct_http_code=${2:-0} direct_http_time=${3:-0}
+		direct_checked=1
 	fi
 
-	sqlite3 -cmd ".timeout 3000" "$DB" "INSERT OR REPLACE INTO samples
+	if sqlite3 -cmd ".timeout 3000" "$DB" "INSERT OR REPLACE INTO samples
 		(ts, cn_ping, cn_loss, cn_http_code, cn_http_time, cn_ok,
 		 intl_ping, intl_loss, intl_http_code, intl_http_time, intl_ok,
-		 direct_http_code, direct_http_time, direct_ok)
+		 direct_http_code, direct_http_time, direct_ok, direct_checked)
 		VALUES
 		($ts, $cn_ping, $cn_loss, $cn_http_code, $cn_http_time, $cn_ok,
 		 $intl_ping, $intl_loss, $intl_http_code, $intl_http_time, $intl_ok,
-		 $direct_http_code, $direct_http_time, $direct_ok);"
+		 $direct_http_code, $direct_http_time, $direct_ok, $direct_checked);"; then
+		db_error_logged=0
+	else
+		if [ "$db_error_logged" = "0" ]; then
+			log "database insert failed"
+			db_error_logged=1
+		fi
+	fi
 
 	today=$(date +%F)
 	if [ "$today" != "$last_clean" ]; then
 		cutoff=$((ts - RETENTION * 86400))
-		sqlite3 -cmd ".timeout 3000" "$DB" "DELETE FROM samples WHERE ts < $cutoff;"
+		if ! sqlite3 -cmd ".timeout 3000" "$DB" "DELETE FROM samples WHERE ts < $cutoff;" >/dev/null; then
+			if [ "$db_error_logged" = "0" ]; then
+				log "database cleanup failed"
+				db_error_logged=1
+			fi
+		fi
 		last_clean=$today
 	fi
 

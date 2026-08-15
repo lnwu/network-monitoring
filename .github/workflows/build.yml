@@ -13,13 +13,12 @@ concurrency:
 env:
   OPENWRT_VERSION: 25.12.0
   ARCH: aarch64_cortex-a72
-  TARGET: armsr
   NM_BUILD_VERSION: 1.0.${{ github.run_number }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: openwrt/sdk:${{ env.ARCH }}-${{ env.OPENWRT_VERSION }}
+    container: openwrt/sdk:aarch64_cortex-a72-25.12.0
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -55,15 +54,19 @@ jobs:
         run: |
           cd /homebuilder/openwrt
           mkdir -p $GITHUB_WORKSPACE/out
-          cp bin/packages/*/netmonitor/netmonitor_*_*.ipk $GITHUB_WORKSPACE/out/netmonitor.ipk
-          cp bin/packages/*/netmonitor/luci-app-netmonitor_*_*.ipk $GITHUB_WORKSPACE/out/luci-app-netmonitor.ipk
+          NETMONITOR_APK=$(find bin/packages -type f -path '*/netmonitor/netmonitor-*.apk' -print -quit)
+          LUCI_APK=$(find bin/packages -type f -path '*/netmonitor/luci-app-netmonitor-*.apk' -print -quit)
+          [ -n "$NETMONITOR_APK" ] && [ -n "$LUCI_APK" ]
+          cp "$NETMONITOR_APK" $GITHUB_WORKSPACE/out/netmonitor.ipk
+          cp "$LUCI_APK" $GITHUB_WORKSPACE/out/luci-app-netmonitor.ipk
+          (cd $GITHUB_WORKSPACE/out && sha256sum netmonitor.ipk luci-app-netmonitor.ipk > SHA256SUMS)
           ls -l $GITHUB_WORKSPACE/out
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ipks
-          path: out/*.ipk
+          path: out/*
 
   release:
     needs: build
@@ -82,7 +85,7 @@ jobs:
         with:
           tag_name: latest
           name: latest
-          files: out/*.ipk
+          files: out/*
           body: |
             自动构建（main 分支最新提交）
             - netmonitor.ipk

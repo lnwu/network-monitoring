@@ -1,9 +1,15 @@
 'use strict';
+'require view';
+'require rpc';
+
+var callDays = rpc.declare({ object: 'netmonitor', method: 'days' });
+var callHistory = rpc.declare({ object: 'netmonitor', method: 'history', params: [ 'date' ] });
+
 return view.extend({
 	title: _('Network History'),
 
 	load: function() {
-		return L.resolveDefault(L.ubus.call('netmonitor', 'days'), { days: [] });
+		return L.resolveDefault(callDays(), { days: [] });
 	},
 
 	render: function(data) {
@@ -32,7 +38,7 @@ return view.extend({
 		}
 
 		function loadDay(d) {
-			L.resolveDefault(L.ubus.call('netmonitor', 'history', { date: d }), {}).then(function(res) {
+			L.resolveDefault(callHistory(d), {}).then(function(res) {
 				renderDay(d, (res && res.samples) ? res.samples : [], +((res && res.interval) || 30));
 			});
 		}
@@ -68,22 +74,30 @@ return view.extend({
 			var cnOk = 0, intlOk = 0, cnSum = 0, cnCnt = 0, cnMax = 0,
 				intlSum = 0, intlCnt = 0, intlMax = 0,
 				cnDown = 0, intlDown = 0, cnOut = 0, intlOut = 0,
-				gap = interval;
+				cnDownSecs = 0, intlDownSecs = 0;
+
+			function sampleDuration(s, i) {
+				var next = (i + 1 < samples.length) ? (+samples[i + 1].ts - +s.ts) : interval;
+				return (next > 0 && next < interval) ? next : interval;
+			}
 
 			samples.forEach(function(s, i) {
 				var c = +s.cn_ok, it = +s.intl_ok;
+				var duration = sampleDuration(s, i);
 				if (c) cnOk++; else cnDown++;
 				if (it) intlOk++; else intlDown++;
 				if (i > 0) {
 					if (!c && +samples[i - 1].cn_ok) cnOut++;
 					if (!it && +samples[i - 1].intl_ok) intlOut++;
+				} else {
+					if (!c) cnOut++;
+					if (!it) intlOut++;
 				}
+				if (!c) cnDownSecs += duration;
+				if (!it) intlDownSecs += duration;
 				if (c && +s.cn_ping > 0) { cnSum += +s.cn_ping; cnCnt++; if (+s.cn_ping > cnMax) cnMax = +s.cn_ping; }
 				if (it && +s.intl_ping > 0) { intlSum += +s.intl_ping; intlCnt++; if (+s.intl_ping > intlMax) intlMax = +s.intl_ping; }
 			});
-
-			if (samples.length > 1)
-				gap = Math.max(1, (samples[samples.length - 1].ts - samples[0].ts) / (samples.length - 1));
 
 			summaryBox.appendChild(statCard(_('Domestic availability'), (100 * cnOk / samples.length).toFixed(1) + '%'));
 			summaryBox.appendChild(statCard(_('International availability'), (100 * intlOk / samples.length).toFixed(1) + '%'));
@@ -92,7 +106,7 @@ return view.extend({
 			summaryBox.appendChild(statCard(_('International latency (avg / max)'),
 				(intlCnt ? (intlSum / intlCnt).toFixed(1) : '-') + ' / ' + (intlMax ? intlMax.toFixed(1) : '-') + ' ms'));
 			summaryBox.appendChild(statCard(_('Outages (domestic / international)'),
-				'%s (%s) / %s (%s)'.format(cnOut, fmtDur(cnDown * gap), intlOut, fmtDur(intlDown * gap))));
+				'%s (%s) / %s (%s)'.format(cnOut, fmtDur(cnDownSecs), intlOut, fmtDur(intlDownSecs))));
 
 			chartBox.innerHTML = chartSVG(samples);
 		}

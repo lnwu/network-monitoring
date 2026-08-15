@@ -24,6 +24,13 @@ define Package/luci-app-netmonitor/description
   daily network fluctuation history charts.
 endef
 
+define Package/luci-app-netmonitor/postinst
+#!/bin/sh
+[ -z "$${IPKG_INSTROOT}" ] || exit 0
+/etc/init.d/rpcd restart
+exit 0
+endef
+
 define Build/Prepare
 	mkdir -p $(PKG_BUILD_DIR)
 endef
