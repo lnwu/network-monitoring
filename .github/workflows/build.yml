@@ -41,6 +41,7 @@ jobs:
         run: |
           cd /builder
           ./scripts/feeds update luci
+          ./scripts/feeds install -p luci luci-base
           make -C feeds/luci/modules/luci-base/src clean po2lmo
           install -D -m0755 feeds/luci/modules/luci-base/src/po2lmo \
             staging_dir/hostpkg/bin/po2lmo
