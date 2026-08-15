@@ -42,6 +42,11 @@ define Package/luci-app-netmonitor/install
 	$(INSTALL_DATA) ./root/usr/share/luci/menu.d/*.json $(1)/usr/share/luci/menu.d/
 	$(INSTALL_DIR) $(1)/usr/share/rpcd/acl.d
 	$(INSTALL_DATA) ./root/usr/share/rpcd/acl.d/*.json $(1)/usr/share/rpcd/acl.d/
+	$(INSTALL_DIR) $(1)/usr/lib/lua/luci/i18n
+	if [ -x "$(STAGING_DIR_HOST)/bin/po2lmo" ]; then \
+		$(STAGING_DIR_HOST)/bin/po2lmo ./po/zh-cn/luci-app-netmonitor.po \
+			$(1)/usr/lib/lua/luci/i18n/luci-app-netmonitor.zh-cn.lmo; \
+	fi
 endef
 
 $(eval $(call BuildPackage,luci-app-netmonitor))

@@ -29,7 +29,7 @@ read -r INPUT || :
 
 case "$METHOD" in
 	status)
-		row=$(sqlite3 -json "$DB" "SELECT * FROM samples ORDER BY ts DESC LIMIT 1" 2>/dev/null)
+		row=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "SELECT * FROM samples ORDER BY ts DESC LIMIT 1" 2>/dev/null)
 		if [ -n "$row" ]; then
 			printf '%s' "$row" | sed 's/^\[//; s/\]$//'
 			echo
@@ -45,7 +45,7 @@ case "$METHOD" in
 		fi
 		config_load netmonitor
 		config_get INTERVAL main interval 30
-		samples=$(sqlite3 -json "$DB" "SELECT ts, cn_ping, cn_loss, cn_http_code, cn_http_time, cn_ok,
+		samples=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "SELECT ts, cn_ping, cn_loss, cn_http_code, cn_http_time, cn_ok,
 				intl_ping, intl_loss, intl_http_code, intl_http_time, intl_ok,
 				direct_http_code, direct_http_time, direct_ok
 			FROM samples
@@ -56,7 +56,7 @@ case "$METHOD" in
 		;;
 
 	days)
-		rows=$(sqlite3 -json "$DB" "
+		rows=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "
 			WITH t AS (
 				SELECT ts,
 					date(ts, 'unixepoch', 'localtime') AS day,
@@ -64,6 +64,7 @@ case "$METHOD" in
 					LAG(cn_ok, 1, 1) OVER (ORDER BY ts) AS p_cn,
 					LAG(intl_ok, 1, 1) OVER (ORDER BY ts) AS p_intl
 				FROM samples
+				WHERE ts >= (strftime('%s', 'now') - 370 * 86400)
 			)
 			SELECT day,
 				COUNT(*) AS samples,

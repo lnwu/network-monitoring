@@ -201,15 +201,17 @@ return view.extend({
 		]));
 
 		days.forEach(function(d) {
+			var pct = function(v) { return (v == null) ? '-' : v + '%'; };
+			var num = function(v) { return (v == null) ? '-' : v; };
 			var row = E('tr', { 'class': 'tr', 'style': 'cursor:pointer', click: function() {
 				dateInput.value = d.day;
 				loadDay(d.day);
 				window.scrollTo({ top: 0, behavior: 'smooth' });
 			}});
-			[d.day, d.cn_avail + '%', d.intl_avail + '%',
-				d.cn_avg + ' / ' + d.cn_max, d.intl_avg + ' / ' + d.intl_max,
-				'%s (%ss)'.format(d.cn_outages, d.cn_down_secs),
-				'%s (%ss)'.format(d.intl_outages, d.intl_down_secs)
+			[d.day, pct(d.cn_avail), pct(d.intl_avail),
+				num(d.cn_avg) + ' / ' + num(d.cn_max), num(d.intl_avg) + ' / ' + num(d.intl_max),
+				'%s (%ss)'.format(num(d.cn_outages), num(d.cn_down_secs)),
+				'%s (%ss)'.format(num(d.intl_outages), num(d.intl_down_secs))
 			].forEach(function(v) {
 				row.appendChild(E('td', { 'class': 'td' }, String(v)));
 			});

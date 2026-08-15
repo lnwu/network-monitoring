@@ -5,6 +5,7 @@
 
 DB_DIR=/etc/netmonitor
 DB="$DB_DIR/history.db"
+WORKDIR=/tmp/netmonitor
 
 INTERVAL=30
 RETENTION=30
@@ -53,7 +54,7 @@ resolve_ip() {
 # do_ping <host> <count> -> "<avg_ms> <loss_pct>"
 do_ping() {
 	local res loss avg
-	res=$(ping -c "$2" -W 2 -q "$1" 2>/dev/null)
+	res=$(ping -c "$2" -W "$TIMEOUT" -q "$1" 2>/dev/null)
 	loss=$(printf '%s\n' "$res" | sed -n 's/.*,\([[:space:]]*\)\([0-9]\{1,3\}\)% packet loss.*/\2/p')
 	avg=$(printf '%s\n' "$res" | sed -n 's/.* = //p' | cut -d'/' -f2)
 	[ -n "$loss" ] || loss=100
@@ -96,7 +97,7 @@ init_db() {
 		direct_http_time REAL DEFAULT 0,
 		direct_ok INTEGER DEFAULT 0
 	);"
-	sqlite3 "$DB" "PRAGMA journal_mode=WAL;"
+	sqlite3 "$DB" "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000;"
 }
 
 log() {
@@ -108,14 +109,23 @@ init_db
 WAN_DEV=
 last_clean=
 prev_state=
+wan_if_prev=
+trap 'rm -rf "$WORKDIR"' EXIT INT TERM
 
 while :; do
 	load_config
+
+	if [ "$WAN_IF" != "$wan_if_prev" ]; then
+		WAN_DEV=
+		wan_if_prev=$WAN_IF
+	fi
+
 	ts=$(date +%s)
-	tmp=$(mktemp -d /tmp/netmonitor.XXXXXX)
+	rm -rf "$WORKDIR"
+	mkdir -p "$WORKDIR"
 
 	# ---- domestic ----
-	( set -- $(do_http "$CN_HTTP"); echo "$1 $2 $3" > "$tmp/cn_http" ) &
+	( set -- $(do_http "$CN_HTTP"); echo "$1 $2 $3" > "$WORKDIR/cn_http" ) &
 	(
 		cn_ip=$(resolve_ip "$CN_PING")
 		if [ -n "$cn_ip" ]; then
@@ -124,10 +134,10 @@ while :; do
 		else
 			echo "0 100"
 		fi
-	) > "$tmp/cn_ping" &
+	) > "$WORKDIR/cn_ping" &
 
 	# ---- international (default route = OpenClash proxy) ----
-	( set -- $(do_http "$INTL_HTTP"); echo "$1 $2 $3" > "$tmp/intl_http" ) &
+	( set -- $(do_http "$INTL_HTTP"); echo "$1 $2 $3" > "$WORKDIR/intl_http" ) &
 	(
 		if [ -n "$INTL_PING" ]; then
 			set -- $(do_ping "$INTL_PING" "$PING_COUNT")
@@ -135,7 +145,7 @@ while :; do
 		else
 			echo "0 100"
 		fi
-	) > "$tmp/intl_ping" &
+	) > "$WORKDIR/intl_ping" &
 
 	# ---- international, direct (bypass proxy) reference ----
 	direct_job=0
@@ -146,26 +156,26 @@ while :; do
 			WAN_DEV=$(detect_wan)
 		fi
 		if [ -n "$WAN_DEV" ]; then
-			( set -- $(do_http "$DIRECT_HTTP" "$WAN_DEV"); echo "$1 $2 $3" > "$tmp/direct" ) &
+			( set -- $(do_http "$DIRECT_HTTP" "$WAN_DEV"); echo "$1 $2 $3" > "$WORKDIR/direct" ) &
 			direct_job=1
 		fi
 	fi
 
 	wait
 
-	set -- $(cat "$tmp/cn_http" 2>/dev/null)
+	set -- $(cat "$WORKDIR/cn_http" 2>/dev/null)
 	cn_http_ok=${1:-0} cn_http_code=${2:-0} cn_http_time=${3:-0}
 
-	set -- $(cat "$tmp/cn_ping" 2>/dev/null)
+	set -- $(cat "$WORKDIR/cn_ping" 2>/dev/null)
 	cn_ping=${1:-0} cn_loss=${2:-100}
 	cn_ping_ok=0
 	[ "$cn_loss" -lt 100 ] 2>/dev/null && cn_ping_ok=1
 	cn_ok=$((cn_http_ok || cn_ping_ok))
 
-	set -- $(cat "$tmp/intl_http" 2>/dev/null)
+	set -- $(cat "$WORKDIR/intl_http" 2>/dev/null)
 	intl_http_ok=${1:-0} intl_http_code=${2:-0} intl_http_time=${3:-0}
 
-	set -- $(cat "$tmp/intl_ping" 2>/dev/null)
+	set -- $(cat "$WORKDIR/intl_ping" 2>/dev/null)
 	intl_ping=${1:-0} intl_loss=${2:-100}
 
 	# HTTP through the proxy is authoritative for intl availability
@@ -173,13 +183,11 @@ while :; do
 
 	direct_ok=0 direct_http_code=0 direct_http_time=0
 	if [ "$direct_job" = "1" ]; then
-		set -- $(cat "$tmp/direct" 2>/dev/null)
+		set -- $(cat "$WORKDIR/direct" 2>/dev/null)
 		direct_ok=${1:-0} direct_http_code=${2:-0} direct_http_time=${3:-0}
 	fi
 
-	rm -rf "$tmp"
-
-	sqlite3 "$DB" "INSERT OR REPLACE INTO samples
+	sqlite3 -cmd ".timeout 3000" "$DB" "INSERT OR REPLACE INTO samples
 		(ts, cn_ping, cn_loss, cn_http_code, cn_http_time, cn_ok,
 		 intl_ping, intl_loss, intl_http_code, intl_http_time, intl_ok,
 		 direct_http_code, direct_http_time, direct_ok)
@@ -191,7 +199,7 @@ while :; do
 	today=$(date +%F)
 	if [ "$today" != "$last_clean" ]; then
 		cutoff=$((ts - RETENTION * 86400))
-		sqlite3 "$DB" "DELETE FROM samples WHERE ts < $cutoff;"
+		sqlite3 -cmd ".timeout 3000" "$DB" "DELETE FROM samples WHERE ts < $cutoff;"
 		last_clean=$today
 	fi
 

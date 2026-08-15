@@ -79,11 +79,16 @@ return view.extend({
 			grid.appendChild(card(_('Verdict'), vok, [ verdict ]));
 		}
 
-		draw(data);
+		draw(data[0]);
 
-		L.Poll.add(function() {
+		var pollFn = function() {
+			if (!document.contains(container)) {
+				L.Poll.remove(pollFn);
+				return null;
+			}
 			return L.resolveDefault(L.ubus.call('netmonitor', 'status'), {}).then(draw);
-		}, 10);
+		};
+		L.Poll.add(pollFn, 10);
 
 		return container;
 	}

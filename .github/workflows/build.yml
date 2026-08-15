@@ -34,8 +34,8 @@ jobs:
       - name: Install luci dependency
         run: |
           cd /homebuilder/openwrt
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
+          ./scripts/feeds update luci
+          ./scripts/feeds install luci
 
       - name: Configure
         run: |

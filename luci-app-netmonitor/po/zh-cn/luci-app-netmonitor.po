@@ -1,0 +1,185 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: luci-app-netmonitor\n"
+"Language: zh-cn\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "Network Status"
+msgstr "网络状态"
+
+msgid "Realtime Connectivity"
+msgstr "实时连通性"
+
+msgid "No data yet. Make sure the netmonitor service is running."
+msgstr "暂无数据。请确认 netmonitor 服务已运行。"
+
+msgid "Domestic (%s)"
+msgstr "国内 (%s)"
+
+msgid "HTTP status: %s (%ss)"
+msgstr "HTTP 状态: %s (%s 秒)"
+
+msgid "Ping: %s ms, loss: %s%%"
+msgstr "Ping: %s ms, 丢包: %s%%"
+
+msgid "Checked at: %s"
+msgstr "检测时间: %s"
+
+msgid "International via proxy"
+msgstr "国际（经代理）"
+
+msgid "Ping %s: %s ms, loss: %s%% (ICMP, usually not proxied)"
+msgstr "Ping %s: %s ms, 丢包 %s%% (ICMP, 通常不经过代理)"
+
+msgid "International direct (bypass proxy)"
+msgstr "国际直连（绕过代理）"
+
+msgid "May always fail from mainland China; reference only"
+msgstr "国内线路下可能始终失败，仅作参考"
+
+msgid "Broadband / modem link appears DOWN"
+msgstr "宽带 / 光猫链路疑似中断"
+
+msgid "Domestic OK, international DOWN, but direct link works - proxy (OpenClash) likely dead"
+msgstr "国内正常，国际中断，但直连正常 —— 代理（OpenClash）可能已失效"
+
+msgid "Domestic OK, international DOWN - proxy or international route issue"
+msgstr "国内正常，国际中断 —— 代理或国际路由异常"
+
+msgid "All connections healthy"
+msgstr "全部连接正常"
+
+msgid "Verdict"
+msgstr "综合判断"
+
+msgid "Network History"
+msgstr "网络历史"
+
+msgid "No samples recorded for %s."
+msgstr "%s 暂无检测记录。"
+
+msgid "Domestic availability"
+msgstr "国内可用率"
+
+msgid "International availability"
+msgstr "国际可用率"
+
+msgid "Domestic latency (avg / max)"
+msgstr "国内延迟（平均 / 最大）"
+
+msgid "International latency (avg / max)"
+msgstr "国际延迟（平均 / 最大）"
+
+msgid "Outages (domestic / international)"
+msgstr "中断次数（国内 / 国际）"
+
+msgid "Daily Network Fluctuation"
+msgstr "每日网络波动"
+
+msgid "Latency (ms, local time of day)"
+msgstr "延迟（毫秒，本地时间）"
+
+msgid "Date"
+msgstr "日期"
+
+msgid "Domestic avail."
+msgstr "国内可用率"
+
+msgid "Intl. avail."
+msgstr "国际可用率"
+
+msgid "Domestic avg/max (ms)"
+msgstr "国内平均/最大（毫秒）"
+
+msgid "Intl. avg/max (ms)"
+msgstr "国际平均/最大（毫秒）"
+
+msgid "Outages (domestic)"
+msgstr "中断次数（国内）"
+
+msgid "Outages (intl.)"
+msgstr "中断次数（国际）"
+
+msgid "All Recorded Days"
+msgstr "全部记录日期"
+
+msgid "No recorded days yet."
+msgstr "暂无记录日期。"
+
+msgid "Domestic"
+msgstr "国内"
+
+msgid "International"
+msgstr "国际"
+
+msgid "Outage"
+msgstr "中断"
+
+msgid "Network Monitor Settings"
+msgstr "网络监控设置"
+
+msgid "Targets and timing for the connectivity monitor. Changes take effect on the next check cycle."
+msgstr "连通性监控的目标与检测间隔。修改将在下一轮检测生效。"
+
+msgid "General"
+msgstr "常规"
+
+msgid "Check interval (seconds)"
+msgstr "检测间隔（秒）"
+
+msgid "Data retention (days)"
+msgstr "数据保留（天）"
+
+msgid "Ping count per check"
+msgstr "每轮 Ping 次数"
+
+msgid "HTTP timeout (seconds)"
+msgstr "HTTP 超时（秒）"
+
+msgid "Log every check cycle"
+msgstr "记录每轮检测日志"
+
+msgid "When disabled, only state changes are written to the system log."
+msgstr "关闭后仅状态变化写入系统日志。"
+
+msgid "Domestic HTTP target"
+msgstr "国内 HTTP 目标"
+
+msgid "Domestic ping target"
+msgstr "国内 Ping 目标"
+
+msgid "International HTTP target (via proxy)"
+msgstr "国际 HTTP 目标（经代理）"
+
+msgid "International ping target (IP, usually not proxied)"
+msgstr "国际 Ping 目标（IP，通常不经过代理）"
+
+msgid "Enable direct international reference check"
+msgstr "启用国际直连参考检测"
+
+msgid "Tries to reach an international target bypassing the proxy by binding to the WAN interface. From mainland China this may always fail depending on the line; useful as a reference only."
+msgstr "通过绑定 WAN 接口绕过代理访问国际目标。国内线路下可能始终失败，仅作参考。"
+
+msgid "Direct check HTTP target"
+msgstr "直连检测 HTTP 目标"
+
+msgid "WAN interface for direct check"
+msgstr "直连检测的 WAN 接口"
+
+msgid "Leave as \"auto\" to detect automatically (e.g. pppoe-wan)."
+msgstr "保留 \"auto\" 自动检测（如 pppoe-wan）。"
+
+msgid "Network Monitor"
+msgstr "网络监控"
+
+msgid "Status"
+msgstr "状态"
+
+msgid "History"
+msgstr "历史"
+
+msgid "Settings"
+msgstr "设置"
