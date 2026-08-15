@@ -82,6 +82,20 @@ for p in netmonitor luci-app-netmonitor; do
 	fi
 done
 
+INSTALLED_PKGS=""
+for p in luci-app-netmonitor netmonitor; do
+	if apk info -e "$p" >/dev/null 2>&1; then
+		INSTALLED_PKGS="$INSTALLED_PKGS $p"
+	fi
+done
+
+if [ -n "$INSTALLED_PKGS" ]; then
+	echo "清理旧版本文件 ..."
+	/etc/init.d/netmonitor stop 2>/dev/null || true
+	/etc/init.d/netmonitor disable 2>/dev/null || true
+	apk del $INSTALLED_PKGS
+fi
+
 apk add --allow-untrusted "$TMPDIR/netmonitor.ipk" "$TMPDIR/luci-app-netmonitor.ipk"
 
 /etc/init.d/rpcd restart

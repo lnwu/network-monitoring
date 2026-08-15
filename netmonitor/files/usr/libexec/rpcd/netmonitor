@@ -68,6 +68,8 @@ case "$METHOD" in
 		if [ -n "$row" ]; then
 			row=${row#\[}
 			row=${row%\]}
+			row=${row#\{}
+			row=${row%\}}
 			printf '{"storage_bytes":%s,%s}\n' "$storage" "$row"
 		else
 			printf '{"storage_bytes":%s}\n' "$storage"
