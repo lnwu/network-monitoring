@@ -22,6 +22,7 @@ return view.extend({
 		/* ---------- day picker ---------- */
 		var summaryBox = E('div', { 'style': 'display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:12px 0' });
 		var chartBox = E('div', { 'class': 'cbi-section', 'style': 'padding:8px' });
+		var storageBox = E('div', { 'class': 'cbi-section', 'style': 'margin:12px 0;padding:10px 14px' });
 		var message = E('div');
 
 		function localDateStr(d) {
@@ -103,8 +104,8 @@ return view.extend({
 				}
 				if (!c) cnDownSecs += duration;
 				if (!it) intlDownSecs += duration;
-				if (c && +s.cn_ping > 0) { cnSum += +s.cn_ping; cnCnt++; if (+s.cn_ping > cnMax) cnMax = +s.cn_ping; }
-				if (it && +s.intl_ping > 0) { intlSum += +s.intl_ping; intlCnt++; if (+s.intl_ping > intlMax) intlMax = +s.intl_ping; }
+				if (c && +s.cn_latency_ms > 0) { cnSum += +s.cn_latency_ms; cnCnt++; if (+s.cn_latency_ms > cnMax) cnMax = +s.cn_latency_ms; }
+				if (it && +s.intl_latency_ms > 0) { intlSum += +s.intl_latency_ms; intlCnt++; if (+s.intl_latency_ms > intlMax) intlMax = +s.intl_latency_ms; }
 			});
 
 			summaryBox.appendChild(statCard(_('Domestic availability'), (100 * cnOk / samples.length).toFixed(1) + '%'));
@@ -124,8 +125,8 @@ return view.extend({
 			var maxV = 100;
 
 			samples.forEach(function(s) {
-				if (+s.cn_ping > maxV) maxV = +s.cn_ping;
-				if (+s.intl_ping > maxV) maxV = +s.intl_ping;
+				if (+s.cn_latency_ms > maxV) maxV = +s.cn_latency_ms;
+				if (+s.intl_latency_ms > maxV) maxV = +s.intl_latency_ms;
 			});
 			maxV = Math.min(Math.ceil(maxV * 1.15 / 50) * 50, 3000);
 
@@ -169,8 +170,8 @@ return view.extend({
 				return pts.length ? '<polyline fill="none" stroke="' + color + '" stroke-width="1.4" points="' + pts.join(' ') + '"/>' : '';
 			}
 
-			p.push(line('#2e6da4', 'cn_ok', 'cn_ping'));
-			p.push(line('#3c9248', 'intl_ok', 'intl_ping'));
+			p.push(line('#2e6da4', 'cn_ok', 'cn_latency_ms'));
+			p.push(line('#3c9248', 'intl_ok', 'intl_latency_ms'));
 
 			/* legend */
 			p.push('<line x1="' + (W - 260) + '" y1="6" x2="' + (W - 240) + '" y2="6" stroke="#2e6da4" stroke-width="3"/>' +
@@ -214,6 +215,16 @@ return view.extend({
 		]);
 
 		container.appendChild(E('h2', {}, _('Daily Network Fluctuation')));
+		var bytes = data && data.storage_bytes != null ? +data.storage_bytes : -1;
+		var storageText = '-';
+		if (bytes >= 0) {
+			if (bytes < 1024) storageText = bytes + ' B';
+			else if (bytes < 1024 * 1024) storageText = (bytes / 1024).toFixed(1) + ' KB';
+			else if (bytes < 1024 * 1024 * 1024) storageText = (bytes / 1024 / 1024).toFixed(1) + ' MB';
+			else storageText = (bytes / 1024 / 1024 / 1024).toFixed(1) + ' GB';
+		}
+		storageBox.appendChild(E('div', {}, _('History data disk usage: %s').format(storageText)));
+		container.appendChild(storageBox);
 		container.appendChild(controls);
 		container.appendChild(summaryBox);
 		container.appendChild(E('h3', {}, _('Latency (ms, local time of day)')));

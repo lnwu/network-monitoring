@@ -6,7 +6,7 @@ OpenWrt 网络连通性监控（LuCI 应用）：实时检测国内 / 国际网�
 
 ## 安装
 
-前置依赖：OpenWrt 25.12 及以上（使用 apk 包管理器）、curl、sqlite3-cli、jsonfilter、sha256sum、nslookup、ping。缺失的可安装依赖会由脚本自动处理。
+前置依赖：OpenWrt 25.12 及以上（使用 apk 包管理器）、curl、sqlite3-cli、jsonfilter、sha256sum。缺失的可安装依赖会由脚本自动处理。
 
 在路由器上执行一行命令：
 
@@ -14,12 +14,12 @@ OpenWrt 网络连通性监控（LuCI 应用）：实时检测国内 / 国际网�
 curl -fsSL https://raw.githubusercontent.com/lnwu/network-monitoring/main/install.sh | sh
 ```
 
-安装完成后访问 LuCI → 网络 → Network Monitor。
+安装完成后访问 LuCI → 网络 → 网络监控。
 
 ## 验证
 
 ```sh
-logread -e netmonitor          # 查看状态变化日志（设置中开启 log_all 后记录每轮检测）
+logread -e netmonitor          # 查看状态变化日志
 ubus call netmonitor status    # 查看最近一次检测结果
 ```
 

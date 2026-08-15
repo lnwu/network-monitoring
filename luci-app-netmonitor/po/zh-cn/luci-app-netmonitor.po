@@ -13,53 +13,20 @@ msgstr "网络状态"
 msgid "Realtime Connectivity"
 msgstr "实时连通性"
 
-msgid "No data yet. Make sure the netmonitor service is running."
-msgstr "暂无数据。请确认 netmonitor 服务已运行。"
+msgid "Domestic"
+msgstr "国内"
 
-msgid "Domestic (%s)"
-msgstr "国内 (%s)"
+msgid "Foreign"
+msgstr "国外"
 
-msgid "HTTP status: %s (%ss)"
-msgstr "HTTP 状态: %s (%s 秒)"
+msgid "Latency: %s ms"
+msgstr "延时：%s ms"
 
-msgid "HTTP check failed"
-msgstr "HTTP 检测失败"
+msgid "Latency: -"
+msgstr "延时：-"
 
-msgid "Ping: %s ms, loss: %s%%"
-msgstr "Ping: %s ms, 丢包: %s%%"
-
-msgid "Checked at: %s"
-msgstr "检测时间: %s"
-
-msgid "International via proxy"
-msgstr "国际（经代理）"
-
-msgid "Ping %s: %s ms, loss: %s%% (ICMP, usually not proxied)"
-msgstr "Ping %s: %s ms, 丢包 %s%% (ICMP, 通常不经过代理)"
-
-msgid "International direct (WAN interface reference)"
-msgstr "国际直连（WAN 接口参考）"
-
-msgid "May always fail from mainland China; reference only"
-msgstr "国内线路下可能始终失败，仅作参考"
-
-msgid "Direct check unavailable"
-msgstr "直连检测不可用"
-
-msgid "Broadband / modem link appears DOWN"
-msgstr "宽带 / 光猫链路疑似中断"
-
-msgid "Domestic OK, international DOWN, but direct link works - proxy (OpenClash) likely dead"
-msgstr "国内正常，国际中断，但直连正常 —— 代理（OpenClash）可能已失效"
-
-msgid "Domestic OK, international DOWN - proxy or international route issue"
-msgstr "国内正常，国际中断 —— 代理或国际路由异常"
-
-msgid "All connections healthy"
-msgstr "全部连接正常"
-
-msgid "Verdict"
-msgstr "综合判断"
+msgid "No data"
+msgstr "暂无数据"
 
 msgid "Network History"
 msgstr "网络历史"
@@ -118,9 +85,6 @@ msgstr "暂无记录日期。"
 msgid "History data disk usage: %s"
 msgstr "历史数据占用磁盘空间：%s"
 
-msgid "Domestic"
-msgstr "国内"
-
 msgid "International"
 msgstr "国际"
 
@@ -142,44 +106,14 @@ msgstr "检测间隔（秒）"
 msgid "Data retention (days)"
 msgstr "数据保留（天）"
 
-msgid "Ping count per check"
-msgstr "每轮 Ping 次数"
-
 msgid "HTTP timeout (seconds)"
 msgstr "HTTP 超时（秒）"
-
-msgid "Log every check cycle"
-msgstr "记录每轮检测日志"
-
-msgid "When disabled, only state changes are written to the system log."
-msgstr "关闭后仅状态变化写入系统日志。"
 
 msgid "Domestic HTTP target"
 msgstr "国内 HTTP 目标"
 
-msgid "Domestic ping target"
-msgstr "国内 Ping 目标"
-
 msgid "International HTTP target (via proxy)"
 msgstr "国际 HTTP 目标（经代理）"
-
-msgid "International ping target (IP, usually not proxied)"
-msgstr "国际 Ping 目标（IP，通常不经过代理）"
-
-msgid "Enable direct international reference check"
-msgstr "启用国际直连参考检测"
-
-msgid "Tries to reach an international target by binding to the WAN interface. This does not guarantee bypassing transparent proxies. From mainland China this may always fail depending on the line; useful as a reference only."
-msgstr "通过绑定 WAN 接口访问国际目标，但不保证绕过透明代理。国内线路下可能始终失败，仅作参考。"
-
-msgid "Direct check HTTP target"
-msgstr "直连检测 HTTP 目标"
-
-msgid "WAN interface for direct check"
-msgstr "直连检测的 WAN 接口"
-
-msgid "Leave as \"auto\" to detect automatically (e.g. pppoe-wan)."
-msgstr "保留 \"auto\" 自动检测（如 pppoe-wan）。"
 
 msgid "Network Monitor"
 msgstr "网络监控"

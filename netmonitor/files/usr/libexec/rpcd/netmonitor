@@ -60,19 +60,20 @@ read -r INPUT || :
 
 case "$METHOD" in
 	status)
-		storage=$(storage_bytes)
-		row=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "SELECT ts, cn_ping, cn_loss, cn_http_code, cn_http_time, cn_ok,
-			intl_ping, intl_loss, intl_http_code, intl_http_time, intl_ok,
-			direct_http_code, direct_http_time, direct_ok, direct_checked
+		row=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "SELECT ts,
+			CASE WHEN cn_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END AS cn_ok,
+			CASE WHEN cn_http_code BETWEEN 200 AND 399 THEN ROUND(cn_http_time * 1000, 1) ELSE NULL END AS cn_latency_ms,
+			CASE WHEN intl_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END AS intl_ok,
+			CASE WHEN intl_http_code BETWEEN 200 AND 399 THEN ROUND(intl_http_time * 1000, 1) ELSE NULL END AS intl_latency_ms
 			FROM samples ORDER BY ts DESC LIMIT 1" 2>/dev/null)
 		if [ -n "$row" ]; then
 			row=${row#\[}
 			row=${row%\]}
 			row=${row#\{}
 			row=${row%\}}
-			printf '{"storage_bytes":%s,%s}\n' "$storage" "$row"
+			printf '{%s}\n' "$row"
 		else
-			printf '{"storage_bytes":%s}\n' "$storage"
+			printf '{}\n'
 		fi
 		;;
 
@@ -83,12 +84,14 @@ case "$METHOD" in
 			*) DATE=$(today) ;;
 		esac
 		load_interval
-		samples=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "SELECT s.ts, s.cn_ping, s.cn_loss, s.cn_http_code, s.cn_http_time, s.cn_ok,
-				sample_interval,
-				s.intl_ping, s.intl_loss, s.intl_http_code, s.intl_http_time, s.intl_ok,
-				s.direct_http_code, s.direct_http_time, s.direct_ok,
-				COALESCE((SELECT p.cn_ok FROM samples p WHERE p.ts < s.ts ORDER BY p.ts DESC LIMIT 1), 1) AS prev_cn_ok,
-				COALESCE((SELECT p.intl_ok FROM samples p WHERE p.ts < s.ts ORDER BY p.ts DESC LIMIT 1), 1) AS prev_intl_ok
+		samples=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "SELECT s.ts,
+				COALESCE(NULLIF(s.sample_interval, 0), $INTERVAL) AS sample_interval,
+				CASE WHEN s.cn_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END AS cn_ok,
+				CASE WHEN s.cn_http_code BETWEEN 200 AND 399 THEN ROUND(s.cn_http_time * 1000, 1) ELSE NULL END AS cn_latency_ms,
+				CASE WHEN s.intl_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END AS intl_ok,
+				CASE WHEN s.intl_http_code BETWEEN 200 AND 399 THEN ROUND(s.intl_http_time * 1000, 1) ELSE NULL END AS intl_latency_ms,
+				COALESCE((SELECT CASE WHEN p.cn_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END FROM samples p WHERE p.ts < s.ts ORDER BY p.ts DESC LIMIT 1), 1) AS prev_cn_ok,
+				COALESCE((SELECT CASE WHEN p.intl_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END FROM samples p WHERE p.ts < s.ts ORDER BY p.ts DESC LIMIT 1), 1) AS prev_intl_ok
 			FROM samples s
 			WHERE s.ts >= strftime('%s', '$DATE 00:00:00', 'utc')
 				AND s.ts < strftime('%s', '$DATE 00:00:00', '+1 day', 'utc')
@@ -98,26 +101,32 @@ case "$METHOD" in
 		;;
 
 	days)
+		load_interval
 		rows=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "
-			WITH t AS (
+			WITH base AS (
 				SELECT ts,
 					date(ts, 'unixepoch', 'localtime') AS day,
-					COALESCE(NULLIF(sample_interval, 0), 1) AS sample_interval,
-					cn_ok, intl_ok, cn_ping, intl_ping,
+					COALESCE(NULLIF(sample_interval, 0), $INTERVAL) AS sample_interval,
+					CASE WHEN cn_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END AS cn_ok,
+					CASE WHEN intl_http_code BETWEEN 200 AND 399 THEN 1 ELSE 0 END AS intl_ok,
+					cn_http_time, intl_http_time
+				FROM samples
+				WHERE ts >= (strftime('%s', 'now') - 370 * 86400)
+			), t AS (
+				SELECT *,
 					LAG(cn_ok, 1, 1) OVER (ORDER BY ts) AS p_cn,
 					LAG(intl_ok, 1, 1) OVER (ORDER BY ts) AS p_intl,
 					LEAD(ts) OVER (ORDER BY ts) AS next_ts
-				FROM samples
-				WHERE ts >= (strftime('%s', 'now') - 370 * 86400)
+				FROM base
 			)
 			SELECT day,
 				COUNT(*) AS samples,
 				ROUND(AVG(cn_ok) * 100, 1) AS cn_avail,
 				ROUND(AVG(intl_ok) * 100, 1) AS intl_avail,
-				ROUND(AVG(CASE WHEN cn_ok = 1 AND cn_ping > 0 THEN cn_ping END), 1) AS cn_avg,
-				ROUND(MAX(CASE WHEN cn_ok = 1 AND cn_ping > 0 THEN cn_ping END), 1) AS cn_max,
-				ROUND(AVG(CASE WHEN intl_ok = 1 AND intl_ping > 0 THEN intl_ping END), 1) AS intl_avg,
-				ROUND(MAX(CASE WHEN intl_ok = 1 AND intl_ping > 0 THEN intl_ping END), 1) AS intl_max,
+				ROUND(AVG(CASE WHEN cn_ok = 1 AND cn_http_time > 0 THEN cn_http_time * 1000 END), 1) AS cn_avg,
+				ROUND(MAX(CASE WHEN cn_ok = 1 AND cn_http_time > 0 THEN cn_http_time * 1000 END), 1) AS cn_max,
+				ROUND(AVG(CASE WHEN intl_ok = 1 AND intl_http_time > 0 THEN intl_http_time * 1000 END), 1) AS intl_avg,
+				ROUND(MAX(CASE WHEN intl_ok = 1 AND intl_http_time > 0 THEN intl_http_time * 1000 END), 1) AS intl_max,
 				SUM(1 - cn_ok) AS cn_down,
 				SUM(1 - intl_ok) AS intl_down,
 				SUM(CASE WHEN cn_ok = 0 AND p_cn = 1 THEN 1 ELSE 0 END) AS cn_outages,
@@ -139,7 +148,7 @@ case "$METHOD" in
 			ORDER BY day DESC
 			LIMIT 366" 2>/dev/null)
 		[ -n "$rows" ] || rows='[]'
-		printf '{"today":"%s","days":%s}\n' "$(today)" "$rows"
+		printf '{"today":"%s","storage_bytes":%s,"days":%s}\n' "$(today)" "$(storage_bytes)" "$rows"
 		;;
 
 	*)

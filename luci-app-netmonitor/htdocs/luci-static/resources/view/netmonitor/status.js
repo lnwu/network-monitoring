@@ -1,7 +1,6 @@
 'use strict';
 'require view';
 'require rpc';
-'require uci';
 'require poll';
 
 var callStatus = rpc.declare({ object: 'netmonitor', method: 'status' });
@@ -10,106 +9,34 @@ return view.extend({
 	title: _('Network Status'),
 
 	load: function() {
-		return Promise.all([
-			L.resolveDefault(callStatus(), null),
-			uci.load('netmonitor').then(function() {
-				return { main: uci.get('netmonitor', 'main') || {} };
-			})
-		]);
+		return L.resolveDefault(callStatus(), null);
 	},
 
 	render: function(data) {
-		var cfg = (data[1] && data[1].main) || {};
-		var cnTarget = cfg.cn_ping_target || 'baidu.com';
-		var intlTarget = cfg.intl_ping_target || '8.8.8.8';
-		var directEnabled = cfg.direct_enabled === '1';
 		var container = E('div');
 		var grid = E('div', { 'style': 'display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px' });
-		var storage = E('div', { 'class': 'cbi-section', 'style': 'margin-top:12px;padding:10px 14px' });
 
 		container.appendChild(E('h2', {}, _('Realtime Connectivity')));
 		container.appendChild(grid);
-		container.appendChild(storage);
 
-		function card(name, state, lines) {
+		function card(name, state, latency) {
 			var color = (state === 1) ? '#3c9248' : (state === 0) ? '#d9534f' : '#999';
 			var el = E('div', { 'class': 'cbi-section', 'style': 'padding:12px 14px;border-left:4px solid ' + color },
 				E('h4', { 'style': 'margin:0 0 8px;font-size:15px' }, name));
-			lines.forEach(function(l) {
-				el.appendChild(E('div', { 'style': 'font-size:13px;line-height:1.7;color:#555' }, l));
-			});
+			var value = (state === 1 && latency != null && isFinite(+latency)) ?
+				_('Latency: %s ms').format((+latency).toFixed(1)) :
+				(state === 0 ? _('Latency: -') : _('No data'));
+			el.appendChild(E('div', { 'style': 'font-size:16px;line-height:1.7;color:#555' }, value));
 			return el;
 		}
 
 		function draw(s) {
 			grid.innerHTML = '';
-			storage.innerHTML = '';
-			var bytes = s && s.storage_bytes != null ? +s.storage_bytes : -1;
-			var storageText = '-';
-			if (bytes >= 0) {
-				if (bytes < 1024) storageText = bytes + ' B';
-				else if (bytes < 1024 * 1024) storageText = (bytes / 1024).toFixed(1) + ' KB';
-				else if (bytes < 1024 * 1024 * 1024) storageText = (bytes / 1024 / 1024).toFixed(1) + ' MB';
-				else storageText = (bytes / 1024 / 1024 / 1024).toFixed(1) + ' GB';
-			}
-			storage.appendChild(E('div', {}, _('History data disk usage: %s').format(storageText)));
-
-			function httpStatus(code, time) {
-				return (+code > 0) ? _('HTTP status: %s (%ss)').format(code, (+time).toFixed(2)) : _('HTTP check failed');
-			}
-
-			if (!s || !s.ts) {
-				grid.appendChild(E('div', { 'class': 'cbi-section' },
-					_('No data yet. Make sure the netmonitor service is running.')));
-				return;
-			}
-
-			var t = new Date(s.ts * 1000).toLocaleString();
-
-			grid.appendChild(card(_('Domestic (%s)').format(cnTarget), +s.cn_ok, [
-				httpStatus(s.cn_http_code, s.cn_http_time),
-				_('Ping: %s ms, loss: %s%%').format((+s.cn_ping > 0) ? (+s.cn_ping).toFixed(1) : '-', s.cn_loss),
-				_('Checked at: %s').format(t)
-			]));
-
-			grid.appendChild(card(_('International via proxy'), +s.intl_ok, [
-				httpStatus(s.intl_http_code, s.intl_http_time),
-				_('Ping %s: %s ms, loss: %s%% (ICMP, usually not proxied)').format(intlTarget, (+s.intl_ping > 0) ? (+s.intl_ping).toFixed(1) : '-', s.intl_loss),
-				_('Checked at: %s').format(t)
-			]));
-
-			if (directEnabled) {
-				var directChecked = s.direct_checked == null || +s.direct_checked === 1;
-				grid.appendChild(card(_('International direct (WAN interface reference)'), directChecked ? +s.direct_ok : -1,
-					directChecked ? [
-						httpStatus(s.direct_http_code, s.direct_http_time),
-						_('May always fail from mainland China; reference only')
-					] : [ _('Direct check unavailable') ]));
-			}
-
-			var verdict, vok;
-			if (+s.cn_ok === 0) {
-				verdict = _('Broadband / modem link appears DOWN');
-				vok = 0;
-			}
-			else if (+s.intl_ok === 0) {
-				if (directEnabled && +s.direct_ok === 1) {
-					verdict = _('Domestic OK, international DOWN, but direct link works - proxy (OpenClash) likely dead');
-				}
-				else {
-					verdict = _('Domestic OK, international DOWN - proxy or international route issue');
-				}
-				vok = 0;
-			}
-			else {
-				verdict = _('All connections healthy');
-				vok = 1;
-			}
-
-			grid.appendChild(card(_('Verdict'), vok, [ verdict ]));
+			grid.appendChild(card(_('Domestic'), s ? +s.cn_ok : -1, s && s.cn_latency_ms));
+			grid.appendChild(card(_('Foreign'), s ? +s.intl_ok : -1, s && s.intl_latency_ms));
 		}
 
-		draw(data[0]);
+		draw(data);
 
 		var pollFn = function() {
 			if (!document.contains(container)) {

@@ -19,9 +19,9 @@ define Package/netmonitor
 endef
 
 define Package/netmonitor/description
-  Periodically checks domestic (baidu.com) and international (google.com,
-  via the default route / OpenClash proxy) connectivity using ping and
-  HTTP probes. Results are stored in SQLite and exposed to LuCI via rpcd.
+	Periodically checks domestic (baidu.com) and international (google.com,
+	via the default route / OpenClash proxy) connectivity using HTTP probes.
+	Results are stored in SQLite and exposed to LuCI via rpcd.
 endef
 
 define Package/netmonitor/conffiles

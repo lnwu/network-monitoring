@@ -7,16 +7,9 @@ DB_DIR=/etc/netmonitor
 DB="$DB_DIR/history.db"
 INTERVAL=1
 RETENTION=7
-PING_COUNT=3
 TIMEOUT=8
-LOG_ALL=0
 CN_HTTP='https://www.baidu.com'
-CN_PING='baidu.com'
 INTL_HTTP='https://www.google.com/generate_204'
-INTL_PING='8.8.8.8'
-DIRECT_HTTP='https://www.cloudflare.com/cdn-cgi/trace'
-DIRECT_ENABLED=1
-WAN_IF=
 
 normalize_uint() {
 	local value fallback
@@ -50,81 +43,27 @@ valid_http_target() {
 	esac
 }
 
-valid_host_target() {
-	case "$1" in
-		'' | -* | *[!A-Za-z0-9._:-]*) return 1 ;;
-		*) return 0 ;;
-	esac
-}
-
-valid_interface() {
-	case "$1" in
-		'' | auto | *[!A-Za-z0-9_.-]*) return 1 ;;
-		*) return 0 ;;
-	esac
-}
-
 load_config() {
 	config_load netmonitor
 	config_get INTERVAL main interval "$INTERVAL"
 	config_get RETENTION main retention "$RETENTION"
-	config_get PING_COUNT main ping_count "$PING_COUNT"
 	config_get TIMEOUT main timeout "$TIMEOUT"
-	config_get LOG_ALL main log_all "$LOG_ALL"
 	config_get CN_HTTP main cn_http_target "$CN_HTTP"
-	config_get CN_PING main cn_ping_target "$CN_PING"
 	config_get INTL_HTTP main intl_http_target "$INTL_HTTP"
-	config_get INTL_PING main intl_ping_target "$INTL_PING"
-	config_get DIRECT_HTTP main direct_http_target "$DIRECT_HTTP"
-	config_get DIRECT_ENABLED main direct_enabled "$DIRECT_ENABLED"
-	config_get WAN_IF main wan_interface "$WAN_IF"
 
 	INTERVAL=$(clamp_uint "$INTERVAL" 1 86400 1)
 	RETENTION=$(clamp_uint "$RETENTION" 1 366 7)
-	PING_COUNT=$(clamp_uint "$PING_COUNT" 1 10 3)
 	TIMEOUT=$(clamp_uint "$TIMEOUT" 2 60 8)
-	case "$LOG_ALL" in 1) ;; *) LOG_ALL=0 ;; esac
-	case "$DIRECT_ENABLED" in 1) ;; *) DIRECT_ENABLED=0 ;; esac
 	[ -n "$CN_HTTP" ] || CN_HTTP='https://www.baidu.com'
-	[ -n "$CN_PING" ] || CN_PING='baidu.com'
 	[ -n "$INTL_HTTP" ] || INTL_HTTP='https://www.google.com/generate_204'
-	[ -n "$INTL_PING" ] || INTL_PING='8.8.8.8'
-	[ -n "$DIRECT_HTTP" ] || DIRECT_HTTP='https://www.cloudflare.com/cdn-cgi/trace'
 	valid_http_target "$CN_HTTP" || CN_HTTP='https://www.baidu.com'
-	valid_host_target "$CN_PING" || CN_PING='baidu.com'
 	valid_http_target "$INTL_HTTP" || INTL_HTTP='https://www.google.com/generate_204'
-	valid_host_target "$INTL_PING" || INTL_PING='8.8.8.8'
-	valid_http_target "$DIRECT_HTTP" || DIRECT_HTTP='https://www.cloudflare.com/cdn-cgi/trace'
-	valid_interface "$WAN_IF" || WAN_IF=auto
 }
 
 detect_wan() {
 	local dev
 	dev=$(ubus call network.interface.wan status 2>/dev/null | jsonfilter -e '@.l3_device' 2>/dev/null)
 	[ -n "$dev" ] && echo "$dev"
-}
-
-# Resolve a domain via dnsmasq and return the first non-fake-ip answer
-resolve_ip() {
-	nslookup "$1" 127.0.0.1 2>/dev/null |
-		awk '$1 == "Address:" || $1 == "Address" { print $NF }' |
-		grep -Ev ':|^(127\.|0\.0\.0\.0|255\.|198\.18\.)' |
-		head -n 1
-}
-
-# do_ping <host> <count> -> "<avg_ms> <loss_pct>"
-do_ping() {
-	local res loss avg
-	if [ -n "$3" ]; then
-		res=$(ping -I "$3" -c "$2" -W "$TIMEOUT" -q "$1" 2>/dev/null)
-	else
-		res=$(ping -c "$2" -W "$TIMEOUT" -q "$1" 2>/dev/null)
-	fi
-	loss=$(printf '%s\n' "$res" | sed -n 's/.*,\([[:space:]]*\)\([0-9]\{1,3\}\)% packet loss.*/\2/p')
-	avg=$(printf '%s\n' "$res" | sed -n 's/.* = //p' | cut -d'/' -f2)
-	[ -n "$loss" ] || loss=100
-	case "$avg" in '' | *[!0-9.]*) avg=0 ;; esac
-	echo "$avg $loss"
 }
 
 # do_http <url> [bind_iface] -> "<ok> <code> <time_s>"
@@ -156,27 +95,14 @@ init_db() {
 	if ! sqlite3 "$DB" "CREATE TABLE IF NOT EXISTS samples (
 		ts INTEGER PRIMARY KEY,
 		sample_interval INTEGER DEFAULT 1,
-		cn_ping REAL DEFAULT 0,
-		cn_loss REAL DEFAULT 100,
 		cn_http_code INTEGER DEFAULT 0,
 		cn_http_time REAL DEFAULT 0,
 		cn_ok INTEGER DEFAULT 0,
-		intl_ping REAL DEFAULT 0,
-		intl_loss REAL DEFAULT 100,
 		intl_http_code INTEGER DEFAULT 0,
 		intl_http_time REAL DEFAULT 0,
-		intl_ok INTEGER DEFAULT 0,
-		direct_http_code INTEGER DEFAULT 0,
-		direct_http_time REAL DEFAULT 0,
-		direct_ok INTEGER DEFAULT 0,
-		direct_checked INTEGER DEFAULT 0
+		intl_ok INTEGER DEFAULT 0
 	);"; then
 		return 1
-	fi
-	if ! sqlite3 "$DB" "SELECT direct_checked FROM samples LIMIT 0;" >/dev/null 2>&1; then
-		if ! sqlite3 "$DB" "ALTER TABLE samples ADD COLUMN direct_checked INTEGER DEFAULT 0;" >/dev/null 2>&1; then
-			return 1
-		fi
 	fi
 	if ! sqlite3 "$DB" "SELECT sample_interval FROM samples LIMIT 0;" >/dev/null 2>&1; then
 		if ! sqlite3 "$DB" "ALTER TABLE samples ADD COLUMN sample_interval INTEGER DEFAULT 30;" >/dev/null 2>&1; then
@@ -199,7 +125,7 @@ if ! init_db; then
 	exit 1
 fi
 
-for dependency in curl sqlite3 jsonfilter nslookup ping; do
+for dependency in curl sqlite3 jsonfilter; do
 	if ! command -v "$dependency" >/dev/null 2>&1; then
 		log "missing dependency: $dependency"
 		exit 1
@@ -222,11 +148,7 @@ while :; do
 
 	ts=$(date +%s)
 	mkdir -p "$WORKDIR"
-	if [ -n "$WAN_IF" ] && [ "$WAN_IF" != "auto" ]; then
-		WAN_DEV=$WAN_IF
-	else
-		WAN_DEV=$(detect_wan)
-	fi
+	WAN_DEV=$(detect_wan)
 
 	# ---- domestic ----
 	(
@@ -236,71 +158,25 @@ while :; do
 		fi
 		echo "$1 $2 $3" > "$WORKDIR/cn_http"
 	) &
-	(
-		cn_ip=$(resolve_ip "$CN_PING")
-		if [ -n "$cn_ip" ]; then
-			set -- $(do_ping "$cn_ip" "$PING_COUNT" "$WAN_DEV")
-			echo "$1 $2"
-		else
-			echo "0 100"
-		fi
-	) > "$WORKDIR/cn_ping" &
 
-	# ---- international (default route = OpenClash proxy) ----
 	( set -- $(do_http "$INTL_HTTP"); echo "$1 $2 $3" > "$WORKDIR/intl_http" ) &
-	(
-		if [ -n "$INTL_PING" ]; then
-			set -- $(do_ping "$INTL_PING" "$PING_COUNT")
-			echo "$1 $2"
-		else
-			echo "0 100"
-		fi
-	) > "$WORKDIR/intl_ping" &
-
-	# ---- international, direct (bypass proxy) reference ----
-	direct_job=0
-	if [ "$DIRECT_ENABLED" = "1" ]; then
-		if [ -n "$WAN_DEV" ]; then
-			( set -- $(do_http "$DIRECT_HTTP" "$WAN_DEV"); echo "$1 $2 $3" > "$WORKDIR/direct" ) &
-			direct_job=1
-		fi
-	fi
 
 	wait
 
 	set -- $(cat "$WORKDIR/cn_http" 2>/dev/null)
 	cn_http_ok=${1:-0} cn_http_code=${2:-0} cn_http_time=${3:-0}
-
-	set -- $(cat "$WORKDIR/cn_ping" 2>/dev/null)
-	cn_ping=${1:-0} cn_loss=${2:-100}
-	cn_ping_ok=0
-	[ "$cn_loss" -lt 100 ] 2>/dev/null && cn_ping_ok=1
-	cn_ok=$((cn_http_ok || cn_ping_ok))
+	cn_ok=$cn_http_ok
 
 	set -- $(cat "$WORKDIR/intl_http" 2>/dev/null)
 	intl_http_ok=${1:-0} intl_http_code=${2:-0} intl_http_time=${3:-0}
-
-	set -- $(cat "$WORKDIR/intl_ping" 2>/dev/null)
-	intl_ping=${1:-0} intl_loss=${2:-100}
-
-	# HTTP through the proxy is authoritative for intl availability
 	intl_ok=$intl_http_ok
 
-	direct_checked=0 direct_ok=0 direct_http_code=0 direct_http_time=0
-	if [ "$direct_job" = "1" ]; then
-		set -- $(cat "$WORKDIR/direct" 2>/dev/null)
-		direct_ok=${1:-0} direct_http_code=${2:-0} direct_http_time=${3:-0}
-		direct_checked=1
-	fi
-
 	if sqlite3 -cmd ".timeout 3000" "$DB" "INSERT OR REPLACE INTO samples
-		(ts, cn_ping, cn_loss, cn_http_code, cn_http_time, cn_ok,
-		 intl_ping, intl_loss, intl_http_code, intl_http_time, intl_ok,
-		 direct_http_code, direct_http_time, direct_ok, direct_checked, sample_interval)
+		(ts, cn_http_code, cn_http_time, cn_ok,
+		 intl_http_code, intl_http_time, intl_ok, sample_interval)
 		VALUES
-		($ts, $cn_ping, $cn_loss, $cn_http_code, $cn_http_time, $cn_ok,
-		 $intl_ping, $intl_loss, $intl_http_code, $intl_http_time, $intl_ok,
-		 $direct_http_code, $direct_http_time, $direct_ok, $direct_checked, $INTERVAL);"; then
+		($ts, $cn_http_code, $cn_http_time, $cn_ok,
+		 $intl_http_code, $intl_http_time, $intl_ok, $INTERVAL);"; then
 		db_error_logged=0
 	else
 		if [ "$db_error_logged" = "0" ]; then
@@ -321,9 +197,9 @@ while :; do
 		last_clean=$today
 	fi
 
-	state="$cn_ok$intl_ok$direct_ok"
-	if [ "$LOG_ALL" = "1" ] || [ -z "$prev_state" ] || [ "$state" != "$prev_state" ]; then
-		log "ts=$ts cn_ok=$cn_ok (http=$cn_http_code ping_loss=$cn_loss%) intl_ok=$intl_ok (http=$intl_http_code) direct_ok=$direct_ok (http=$direct_http_code)"
+	state="$cn_ok$intl_ok"
+	if [ -z "$prev_state" ] || [ "$state" != "$prev_state" ]; then
+		log "ts=$ts cn_ok=$cn_ok (http=$cn_http_code) intl_ok=$intl_ok (http=$intl_http_code)"
 	fi
 	prev_state=$state
 
