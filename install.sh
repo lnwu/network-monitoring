@@ -64,12 +64,15 @@ BASE_URL="https://github.com/$REPO/releases/latest/download"
 TMPDIR=$(mktemp -d /tmp/netmonitor-install.XXXXXX)
 trap 'rm -rf "$TMPDIR"' EXIT
 
+echo "下载校验文件 ..."
 curl -Lf --retry 3 --retry-delay 2 --connect-timeout 15 --max-time 120 \
+	--progress-bar \
 	"$BASE_URL/SHA256SUMS" -o "$TMPDIR/SHA256SUMS"
 
 for p in netmonitor luci-app-netmonitor; do
 	echo "下载 $p ..."
 	curl -Lf --retry 3 --retry-delay 2 --connect-timeout 15 --max-time 120 \
+		--progress-bar \
 		"$BASE_URL/$p.ipk" -o "$TMPDIR/$p.ipk"
 	expected=$(awk -v name="$p.ipk" '$2 == name { print $1 }' "$TMPDIR/SHA256SUMS")
 	actual=$(sha256sum "$TMPDIR/$p.ipk" | awk '{ print $1 }')
