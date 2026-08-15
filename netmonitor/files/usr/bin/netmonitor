@@ -27,6 +27,9 @@ normalize_uint() {
 	esac
 	value=$(printf '%s' "$value" | sed 's/^0*//')
 	[ -n "$value" ] || value=0
+	case "$value" in
+		??????*) printf '%s' "$fallback"; return ;;
+	esac
 	printf '%s' "$value"
 }
 
@@ -112,7 +115,11 @@ resolve_ip() {
 # do_ping <host> <count> -> "<avg_ms> <loss_pct>"
 do_ping() {
 	local res loss avg
-	res=$(ping -c "$2" -W "$TIMEOUT" -q "$1" 2>/dev/null)
+	if [ -n "$3" ]; then
+		res=$(ping -I "$3" -c "$2" -W "$TIMEOUT" -q "$1" 2>/dev/null)
+	else
+		res=$(ping -c "$2" -W "$TIMEOUT" -q "$1" 2>/dev/null)
+	fi
 	loss=$(printf '%s\n' "$res" | sed -n 's/.*,\([[:space:]]*\)\([0-9]\{1,3\}\)% packet loss.*/\2/p')
 	avg=$(printf '%s\n' "$res" | sed -n 's/.* = //p' | cut -d'/' -f2)
 	[ -n "$loss" ] || loss=100
@@ -148,6 +155,7 @@ init_db() {
 	fi
 	if ! sqlite3 "$DB" "CREATE TABLE IF NOT EXISTS samples (
 		ts INTEGER PRIMARY KEY,
+		sample_interval INTEGER DEFAULT 30,
 		cn_ping REAL DEFAULT 0,
 		cn_loss REAL DEFAULT 100,
 		cn_http_code INTEGER DEFAULT 0,
@@ -167,6 +175,11 @@ init_db() {
 	fi
 	if ! sqlite3 "$DB" "SELECT direct_checked FROM samples LIMIT 0;" >/dev/null 2>&1; then
 		if ! sqlite3 "$DB" "ALTER TABLE samples ADD COLUMN direct_checked INTEGER DEFAULT 0;" >/dev/null 2>&1; then
+			return 1
+		fi
+	fi
+	if ! sqlite3 "$DB" "SELECT sample_interval FROM samples LIMIT 0;" >/dev/null 2>&1; then
+		if ! sqlite3 "$DB" "ALTER TABLE samples ADD COLUMN sample_interval INTEGER DEFAULT 30;" >/dev/null 2>&1; then
 			return 1
 		fi
 	fi
@@ -209,13 +222,18 @@ while :; do
 
 	ts=$(date +%s)
 	mkdir -p "$WORKDIR"
+	if [ -n "$WAN_IF" ] && [ "$WAN_IF" != "auto" ]; then
+		WAN_DEV=$WAN_IF
+	else
+		WAN_DEV=$(detect_wan)
+	fi
 
 	# ---- domestic ----
-	( set -- $(do_http "$CN_HTTP"); echo "$1 $2 $3" > "$WORKDIR/cn_http" ) &
+	( set -- $(do_http "$CN_HTTP" "$WAN_DEV"); echo "$1 $2 $3" > "$WORKDIR/cn_http" ) &
 	(
 		cn_ip=$(resolve_ip "$CN_PING")
 		if [ -n "$cn_ip" ]; then
-			set -- $(do_ping "$cn_ip" "$PING_COUNT")
+			set -- $(do_ping "$cn_ip" "$PING_COUNT" "$WAN_DEV")
 			echo "$1 $2"
 		else
 			echo "0 100"
@@ -236,11 +254,6 @@ while :; do
 	# ---- international, direct (bypass proxy) reference ----
 	direct_job=0
 	if [ "$DIRECT_ENABLED" = "1" ]; then
-		if [ -n "$WAN_IF" ] && [ "$WAN_IF" != "auto" ]; then
-			WAN_DEV=$WAN_IF
-		else
-			WAN_DEV=$(detect_wan)
-		fi
 		if [ -n "$WAN_DEV" ]; then
 			( set -- $(do_http "$DIRECT_HTTP" "$WAN_DEV"); echo "$1 $2 $3" > "$WORKDIR/direct" ) &
 			direct_job=1
@@ -277,11 +290,11 @@ while :; do
 	if sqlite3 -cmd ".timeout 3000" "$DB" "INSERT OR REPLACE INTO samples
 		(ts, cn_ping, cn_loss, cn_http_code, cn_http_time, cn_ok,
 		 intl_ping, intl_loss, intl_http_code, intl_http_time, intl_ok,
-		 direct_http_code, direct_http_time, direct_ok, direct_checked)
+		 direct_http_code, direct_http_time, direct_ok, direct_checked, sample_interval)
 		VALUES
 		($ts, $cn_ping, $cn_loss, $cn_http_code, $cn_http_time, $cn_ok,
 		 $intl_ping, $intl_loss, $intl_http_code, $intl_http_time, $intl_ok,
-		 $direct_http_code, $direct_http_time, $direct_ok, $direct_checked);"; then
+		 $direct_http_code, $direct_http_time, $direct_ok, $direct_checked, $INTERVAL);"; then
 		db_error_logged=0
 	else
 		if [ "$db_error_logged" = "0" ]; then

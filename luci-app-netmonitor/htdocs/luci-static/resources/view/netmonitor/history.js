@@ -15,6 +15,7 @@ return view.extend({
 	render: function(data) {
 		var self = this;
 		var days = (data && data.days) ? data.days : [];
+		var loadSerial = 0;
 
 		var container = E('div');
 
@@ -28,7 +29,7 @@ return view.extend({
 			return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
 		}
 
-		var todayStr = localDateStr(new Date());
+		var todayStr = (data && data.today) || localDateStr(new Date());
 
 		function shiftDate(d, delta) {
 			var t = new Date(d + 'T00:00:00');
@@ -38,7 +39,9 @@ return view.extend({
 		}
 
 		function loadDay(d) {
+			var serial = ++loadSerial;
 			L.resolveDefault(callHistory(d), {}).then(function(res) {
+				if (serial !== loadSerial) return;
 				renderDay(d, (res && res.samples) ? res.samples : [], +((res && res.interval) || 30));
 			});
 		}
@@ -77,8 +80,13 @@ return view.extend({
 				cnDownSecs = 0, intlDownSecs = 0;
 
 			function sampleDuration(s, i) {
-				var next = (i + 1 < samples.length) ? (+samples[i + 1].ts - +s.ts) : interval;
-				return (next > 0 && next < interval) ? next : interval;
+				var sampleInterval = +s.sample_interval;
+				if (!(sampleInterval > 0)) sampleInterval = interval;
+				if (i + 1 < samples.length) {
+					var next = +samples[i + 1].ts - +s.ts;
+					return next > 0 ? Math.min(next, sampleInterval) : 0;
+				}
+				return Math.min(sampleInterval, Math.max(0, Math.floor(Date.now() / 1000) - +s.ts));
 			}
 
 			samples.forEach(function(s, i) {
@@ -90,8 +98,8 @@ return view.extend({
 					if (!c && +samples[i - 1].cn_ok) cnOut++;
 					if (!it && +samples[i - 1].intl_ok) intlOut++;
 				} else {
-					if (!c) cnOut++;
-					if (!it) intlOut++;
+					if (!c && +s.prev_cn_ok) cnOut++;
+					if (!it && +s.prev_intl_ok) intlOut++;
 				}
 				if (!c) cnDownSecs += duration;
 				if (!it) intlDownSecs += duration;

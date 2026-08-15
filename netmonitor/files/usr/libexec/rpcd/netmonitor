@@ -5,8 +5,6 @@
 
 DB=/etc/netmonitor/history.db
 
-DATE_RE='^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$'
-
 normalize_uint() {
 	local value fallback
 	value=$1
@@ -16,6 +14,9 @@ normalize_uint() {
 	esac
 	value=$(printf '%s' "$value" | sed 's/^0*//')
 	[ -n "$value" ] || value=0
+	case "$value" in
+		??????*) printf '%s' "$fallback"; return ;;
+	esac
 	printf '%s' "$value"
 }
 
@@ -63,26 +64,31 @@ case "$METHOD" in
 
 	history)
 		DATE=$(printf '%s' "$INPUT" | jsonfilter -e '@.date' 2>/dev/null)
-		if ! printf '%s' "$DATE" | grep -q "$DATE_RE"; then
-			DATE=$(today)
-		fi
+		case "$DATE" in
+			[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
+			*) DATE=$(today) ;;
+		esac
 		load_interval
-		samples=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "SELECT ts, cn_ping, cn_loss, cn_http_code, cn_http_time, cn_ok,
-				intl_ping, intl_loss, intl_http_code, intl_http_time, intl_ok,
-				direct_http_code, direct_http_time, direct_ok
-			FROM samples
-			WHERE date(ts, 'unixepoch', 'localtime') = '$DATE'
-			ORDER BY ts" 2>/dev/null)
+		samples=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "SELECT s.ts, s.cn_ping, s.cn_loss, s.cn_http_code, s.cn_http_time, s.cn_ok,
+				sample_interval,
+				s.intl_ping, s.intl_loss, s.intl_http_code, s.intl_http_time, s.intl_ok,
+				s.direct_http_code, s.direct_http_time, s.direct_ok,
+				COALESCE((SELECT p.cn_ok FROM samples p WHERE p.ts < s.ts ORDER BY p.ts DESC LIMIT 1), 1) AS prev_cn_ok,
+				COALESCE((SELECT p.intl_ok FROM samples p WHERE p.ts < s.ts ORDER BY p.ts DESC LIMIT 1), 1) AS prev_intl_ok
+			FROM samples s
+			WHERE s.ts >= strftime('%s', '$DATE 00:00:00', 'utc')
+				AND s.ts < strftime('%s', '$DATE 00:00:00', '+1 day', 'utc')
+			ORDER BY s.ts" 2>/dev/null)
 		[ -n "$samples" ] || samples='[]'
 		printf '{"date":"%s","interval":%s,"samples":%s}\n' "$DATE" "$INTERVAL" "$samples"
 		;;
 
 	days)
-		load_interval
 		rows=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "
 			WITH t AS (
 				SELECT ts,
 					date(ts, 'unixepoch', 'localtime') AS day,
+					COALESCE(NULLIF(sample_interval, 0), 30) AS sample_interval,
 					cn_ok, intl_ok, cn_ping, intl_ping,
 					LAG(cn_ok, 1, 1) OVER (ORDER BY ts) AS p_cn,
 					LAG(intl_ok, 1, 1) OVER (ORDER BY ts) AS p_intl,
@@ -94,28 +100,32 @@ case "$METHOD" in
 				COUNT(*) AS samples,
 				ROUND(AVG(cn_ok) * 100, 1) AS cn_avail,
 				ROUND(AVG(intl_ok) * 100, 1) AS intl_avail,
-				ROUND(AVG(CASE WHEN cn_ping > 0 THEN cn_ping END), 1) AS cn_avg,
-				ROUND(MAX(cn_ping), 1) AS cn_max,
-				ROUND(AVG(CASE WHEN intl_ping > 0 THEN intl_ping END), 1) AS intl_avg,
-				ROUND(MAX(intl_ping), 1) AS intl_max,
+				ROUND(AVG(CASE WHEN cn_ok = 1 AND cn_ping > 0 THEN cn_ping END), 1) AS cn_avg,
+				ROUND(MAX(CASE WHEN cn_ok = 1 AND cn_ping > 0 THEN cn_ping END), 1) AS cn_max,
+				ROUND(AVG(CASE WHEN intl_ok = 1 AND intl_ping > 0 THEN intl_ping END), 1) AS intl_avg,
+				ROUND(MAX(CASE WHEN intl_ok = 1 AND intl_ping > 0 THEN intl_ping END), 1) AS intl_max,
 				SUM(1 - cn_ok) AS cn_down,
 				SUM(1 - intl_ok) AS intl_down,
 				SUM(CASE WHEN cn_ok = 0 AND p_cn = 1 THEN 1 ELSE 0 END) AS cn_outages,
 				SUM(CASE WHEN intl_ok = 0 AND p_intl = 1 THEN 1 ELSE 0 END) AS intl_outages,
 				SUM(CASE WHEN cn_ok = 0 THEN
-					CASE WHEN next_ts IS NULL OR next_ts <= ts OR next_ts - ts > $INTERVAL
-						THEN $INTERVAL ELSE next_ts - ts END
+					CASE WHEN next_ts IS NULL
+						THEN MAX(0, MIN(sample_interval, CAST(strftime('%s', 'now') AS INTEGER) - ts))
+						WHEN next_ts <= ts THEN 0
+						ELSE MIN(sample_interval, next_ts - ts) END
 					ELSE 0 END) AS cn_down_secs,
 				SUM(CASE WHEN intl_ok = 0 THEN
-					CASE WHEN next_ts IS NULL OR next_ts <= ts OR next_ts - ts > $INTERVAL
-						THEN $INTERVAL ELSE next_ts - ts END
+					CASE WHEN next_ts IS NULL
+						THEN MAX(0, MIN(sample_interval, CAST(strftime('%s', 'now') AS INTEGER) - ts))
+						WHEN next_ts <= ts THEN 0
+						ELSE MIN(sample_interval, next_ts - ts) END
 					ELSE 0 END) AS intl_down_secs
 			FROM t
 			GROUP BY day
 			ORDER BY day DESC
 			LIMIT 366" 2>/dev/null)
 		[ -n "$rows" ] || rows='[]'
-		printf '{"days":%s}\n' "$rows"
+		printf '{"today":"%s","days":%s}\n' "$(today)" "$rows"
 		;;
 
 	*)

@@ -15,11 +15,11 @@ return view.extend({
 
 		o = s.option(form.Value, 'interval', _('Check interval (seconds)'));
 		o.placeholder = '30';
-		o.datatype = 'and(uinteger,min(10))';
+		o.datatype = 'and(uinteger,min(10),max(86400))';
 
 		o = s.option(form.Value, 'retention', _('Data retention (days)'));
 		o.placeholder = '30';
-		o.datatype = 'and(uinteger,min(1))';
+		o.datatype = 'and(uinteger,min(1),max(366))';
 
 		o = s.option(form.Value, 'ping_count', _('Ping count per check'));
 		o.placeholder = '3';
@@ -27,7 +27,7 @@ return view.extend({
 
 		o = s.option(form.Value, 'timeout', _('HTTP timeout (seconds)'));
 		o.placeholder = '8';
-		o.datatype = 'and(uinteger,min(2))';
+		o.datatype = 'and(uinteger,min(2),max(60))';
 
 		o = s.option(form.Flag, 'log_all', _('Log every check cycle'),
 			_('When disabled, only state changes are written to the system log.'));

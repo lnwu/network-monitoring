@@ -23,6 +23,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate shell scripts
+        run: |
+          sh -n "$GITHUB_WORKSPACE/install.sh"
+          sh -n "$GITHUB_WORKSPACE/netmonitor/files/usr/bin/netmonitor"
+          sh -n "$GITHUB_WORKSPACE/netmonitor/files/usr/libexec/rpcd/netmonitor"
+          sh -n "$GITHUB_WORKSPACE/netmonitor/files/etc/init.d/netmonitor"
+
       - name: Add feed
         run: |
           cd /homebuilder/openwrt
@@ -54,9 +61,12 @@ jobs:
         run: |
           cd /homebuilder/openwrt
           mkdir -p $GITHUB_WORKSPACE/out
-          NETMONITOR_APK=$(find bin/packages -type f -path '*/netmonitor/netmonitor-*.apk' -print -quit)
-          LUCI_APK=$(find bin/packages -type f -path '*/netmonitor/luci-app-netmonitor-*.apk' -print -quit)
-          [ -n "$NETMONITOR_APK" ] && [ -n "$LUCI_APK" ]
+          NETMONITOR_APKS=$(find bin/packages -type f -path '*/netmonitor/netmonitor-*.apk' -print)
+          LUCI_APKS=$(find bin/packages -type f -path '*/netmonitor/luci-app-netmonitor-*.apk' -print)
+          [ "$(printf '%s\n' "$NETMONITOR_APKS" | sed '/^$/d' | wc -l)" -eq 1 ]
+          [ "$(printf '%s\n' "$LUCI_APKS" | sed '/^$/d' | wc -l)" -eq 1 ]
+          NETMONITOR_APK=$NETMONITOR_APKS
+          LUCI_APK=$LUCI_APKS
           cp "$NETMONITOR_APK" $GITHUB_WORKSPACE/out/netmonitor.ipk
           cp "$LUCI_APK" $GITHUB_WORKSPACE/out/luci-app-netmonitor.ipk
           (cd $GITHUB_WORKSPACE/out && sha256sum netmonitor.ipk luci-app-netmonitor.ipk > SHA256SUMS)

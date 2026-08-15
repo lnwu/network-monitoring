@@ -22,7 +22,7 @@ return view.extend({
 		var cfg = (data[1] && data[1].main) || {};
 		var cnTarget = cfg.cn_ping_target || 'baidu.com';
 		var intlTarget = cfg.intl_ping_target || '8.8.8.8';
-		var directEnabled = cfg.direct_enabled !== '0';
+		var directEnabled = cfg.direct_enabled === '1';
 		var container = E('div');
 		var grid = E('div', { 'style': 'display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px' });
 

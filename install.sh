@@ -39,7 +39,7 @@ if ! command -v apk >/dev/null 2>&1; then
 fi
 
 MISSING_PKGS=""
-for item in "curl:curl" "sqlite3:sqlite3-cli" "jsonfilter:jsonfilter" "sha256sum:busybox"; do
+for item in "curl:curl" "sqlite3:sqlite3-cli" "jsonfilter:jsonfilter" "sha256sum:busybox" "nslookup:busybox" "ping:busybox"; do
 	cmd=${item%%:*}
 	pkg=${item#*:}
 	if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -52,6 +52,13 @@ if [ -n "$MISSING_PKGS" ]; then
 	apk update
 	apk add $MISSING_PKGS
 fi
+
+for dependency in curl sqlite3 jsonfilter sha256sum nslookup ping; do
+	if ! command -v "$dependency" >/dev/null 2>&1; then
+		echo "错误: 安装依赖后仍缺少命令: $dependency"
+		exit 1
+	fi
+done
 
 BASE_URL="https://github.com/$REPO/releases/latest/download"
 TMPDIR=$(mktemp -d /tmp/netmonitor-install.XXXXXX)

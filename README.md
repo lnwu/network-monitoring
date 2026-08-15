@@ -6,7 +6,7 @@ OpenWrt 网络连通性监控（LuCI 应用）：实时检测国内 / 国际网�
 
 ## 安装
 
-前置依赖：OpenWrt 25.12 及以上（使用 apk 包管理器）、curl、sqlite3-cli、jsonfilter、sha256sum。缺失的可安装依赖会由脚本自动处理。
+前置依赖：OpenWrt 25.12 及以上（使用 apk 包管理器）、curl、sqlite3-cli、jsonfilter、sha256sum、nslookup、ping。缺失的可安装依赖会由脚本自动处理。
 
 在路由器上执行一行命令：
 
