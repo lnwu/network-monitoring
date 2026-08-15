@@ -47,7 +47,7 @@ detect_wan() {
 resolve_ip() {
 	nslookup "$1" 127.0.0.1 2>/dev/null |
 		awk '$1 == "Address:" || $1 == "Address" { print $NF }' |
-		grep -Ev '^(127\.|0\.0\.0\.0|255\.|198\.18\.|::1$|fe80)' |
+		grep -Ev ':|^(127\.|0\.0\.0\.0|255\.|198\.18\.)' |
 		head -n 1
 }
 
@@ -74,9 +74,11 @@ do_http() {
 	fi
 	code=${out%% *}
 	t=${out##* }
-	case "$code" in '' | 000) code=0; t=0 ;; esac
+	case "$code" in '' | 000 | *[!0-9]*) code=0; t=0 ;; esac
 	case "$t" in '' | *[!0-9.]*) t=0 ;; esac
-	awk -v c="$code" 'BEGIN { print (c >= 200 && c < 400) ? 1 : 0, c, t + 0 }'
+	local ok=0
+	[ "$code" -ge 200 ] && [ "$code" -lt 400 ] && ok=1
+	echo "$ok $code $t"
 }
 
 init_db() {
@@ -110,7 +112,8 @@ WAN_DEV=
 last_clean=
 prev_state=
 wan_if_prev=
-trap 'rm -rf "$WORKDIR"' EXIT INT TERM
+trap 'rm -rf "$WORKDIR"' EXIT
+trap 'exit 0' INT TERM
 
 while :; do
 	load_config
@@ -121,7 +124,6 @@ while :; do
 	fi
 
 	ts=$(date +%s)
-	rm -rf "$WORKDIR"
 	mkdir -p "$WORKDIR"
 
 	# ---- domestic ----

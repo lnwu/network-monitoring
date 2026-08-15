@@ -45,6 +45,7 @@ case "$METHOD" in
 		fi
 		config_load netmonitor
 		config_get INTERVAL main interval 30
+		case "$INTERVAL" in '' | *[!0-9]*) INTERVAL=30 ;; esac
 		samples=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "SELECT ts, cn_ping, cn_loss, cn_http_code, cn_http_time, cn_ok,
 				intl_ping, intl_loss, intl_http_code, intl_http_time, intl_ok,
 				direct_http_code, direct_http_time, direct_ok

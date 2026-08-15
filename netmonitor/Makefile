@@ -28,6 +28,14 @@ define Package/netmonitor/conffiles
 /etc/config/netmonitor
 endef
 
+define Package/netmonitor/postinst
+#!/bin/sh
+[ -z "$${IPKG_INSTROOT}" ] || exit 0
+/etc/init.d/netmonitor enable
+/etc/init.d/netmonitor start
+exit 0
+endef
+
 define Build/Prepare
 	mkdir -p $(PKG_BUILD_DIR)
 endef

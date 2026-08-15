@@ -44,6 +44,16 @@ return view.extend({
 			]);
 		}
 
+		function fmtDur(v) {
+			if (v == null || isNaN(+v)) return '-';
+			v = Math.round(+v);
+			if (v < 60) return v + 's';
+			var m = Math.floor(v / 60), s = v % 60;
+			if (m < 60) return s ? m + 'm ' + s + 's' : m + 'm';
+			var h = Math.floor(m / 60);
+			return h + 'h ' + (m % 60) + 'm';
+		}
+
 		function renderDay(date, samples, interval) {
 			summaryBox.innerHTML = '';
 			chartBox.innerHTML = '';
@@ -82,7 +92,7 @@ return view.extend({
 			summaryBox.appendChild(statCard(_('International latency (avg / max)'),
 				(intlCnt ? (intlSum / intlCnt).toFixed(1) : '-') + ' / ' + (intlMax ? intlMax.toFixed(1) : '-') + ' ms'));
 			summaryBox.appendChild(statCard(_('Outages (domestic / international)'),
-				'%s (%ss) / %s (%ss)'.format(cnOut, cnDown * gap, intlOut, intlDown * gap)));
+				'%s (%s) / %s (%s)'.format(cnOut, fmtDur(cnDown * gap), intlOut, fmtDur(intlDown * gap))));
 
 			chartBox.innerHTML = chartSVG(samples);
 		}
@@ -142,11 +152,11 @@ return view.extend({
 
 			/* legend */
 			p.push('<line x1="' + (W - 260) + '" y1="6" x2="' + (W - 240) + '" y2="6" stroke="#2e6da4" stroke-width="3"/>' +
-				'<text x="' + (W - 234) + '" y="10" font-size="11" fill="#555">Domestic</text>');
+				'<text x="' + (W - 234) + '" y="10" font-size="11" fill="#555">' + _('Domestic') + '</text>');
 			p.push('<line x1="' + (W - 170) + '" y1="6" x2="' + (W - 150) + '" y2="6" stroke="#3c9248" stroke-width="3"/>' +
-				'<text x="' + (W - 144) + '" y="10" font-size="11" fill="#555">International</text>');
+				'<text x="' + (W - 144) + '" y="10" font-size="11" fill="#555">' + _('International') + '</text>');
 			p.push('<rect x="' + (W - 60) + '" y="2" width="10" height="8" fill="rgba(217,83,79,0.5)"/>' +
-				'<text x="' + (W - 46) + '" y="10" font-size="11" fill="#555">Outage</text>');
+				'<text x="' + (W - 46) + '" y="10" font-size="11" fill="#555">' + _('Outage') + '</text>');
 
 			return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto" xmlns="http://www.w3.org/2000/svg">' + p.join('') + '</svg>';
 		}
@@ -210,8 +220,8 @@ return view.extend({
 			}});
 			[d.day, pct(d.cn_avail), pct(d.intl_avail),
 				num(d.cn_avg) + ' / ' + num(d.cn_max), num(d.intl_avg) + ' / ' + num(d.intl_max),
-				'%s (%ss)'.format(num(d.cn_outages), num(d.cn_down_secs)),
-				'%s (%ss)'.format(num(d.intl_outages), num(d.intl_down_secs))
+				'%s (%s)'.format(num(d.cn_outages), fmtDur(d.cn_down_secs)),
+				'%s (%s)'.format(num(d.intl_outages), fmtDur(d.intl_down_secs))
 			].forEach(function(v) {
 				row.appendChild(E('td', { 'class': 'td' }, String(v)));
 			});
