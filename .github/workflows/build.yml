@@ -32,22 +32,27 @@ jobs:
           sh -n "$GITHUB_WORKSPACE/netmonitor/files/usr/libexec/rpcd/netmonitor"
           sh -n "$GITHUB_WORKSPACE/netmonitor/files/etc/init.d/netmonitor"
 
+      - name: Prepare SDK
+        run: |
+          cd /builder
+          [ -d ./scripts ] || ./setup.sh
+
       - name: Add feed
         run: |
-          cd /homebuilder/openwrt
+          cd /builder
           echo "src-link netmonitor $GITHUB_WORKSPACE" >> feeds.conf
           ./scripts/feeds update netmonitor
           ./scripts/feeds install -a -p netmonitor
 
       - name: Install luci dependency
         run: |
-          cd /homebuilder/openwrt
+          cd /builder
           ./scripts/feeds update luci
           ./scripts/feeds install luci
 
       - name: Configure
         run: |
-          cd /homebuilder/openwrt
+          cd /builder
           make defconfig
           echo 'CONFIG_PACKAGE_netmonitor=m' >> .config
           echo 'CONFIG_PACKAGE_luci-app-netmonitor=m' >> .config
@@ -55,13 +60,13 @@ jobs:
 
       - name: Compile
         run: |
-          cd /homebuilder/openwrt
+          cd /builder
           make package/netmonitor/compile -j$(nproc) V=s || make package/netmonitor/compile V=s
           make package/luci-app-netmonitor/compile -j$(nproc) V=s || make package/luci-app-netmonitor/compile V=s
 
       - name: Collect and rename
         run: |
-          cd /homebuilder/openwrt
+          cd /builder
           mkdir -p $GITHUB_WORKSPACE/out
           NETMONITOR_APKS=$(find bin/packages -type f -path '*/netmonitor/netmonitor-*.apk' -print)
           LUCI_APKS=$(find bin/packages -type f -path '*/netmonitor/luci-app-netmonitor-*.apk' -print)
