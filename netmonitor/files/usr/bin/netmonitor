@@ -61,9 +61,9 @@ load_config() {
 }
 
 detect_wan() {
-	local dev
-	dev=$(ubus call network.interface.wan status 2>/dev/null | jsonfilter -e '@.l3_device' 2>/dev/null)
-	[ -n "$dev" ] && echo "$dev"
+	local addr
+	addr=$(ubus call network.interface.wan status 2>/dev/null | jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+	[ -n "$addr" ] && echo "$addr"
 }
 
 # do_http <url> [bind_iface] [direct] -> "<ok> <code> <time_s>"
@@ -153,7 +153,7 @@ for dependency in curl sqlite3 jsonfilter; do
 	fi
 done
 
-WAN_DEV=
+WAN_ADDR=
 last_clean=
 prev_state=
 db_error_logged=0
@@ -169,7 +169,7 @@ while :; do
 
 	ts=$(date +%s)
 	mkdir -p "$WORKDIR"
-	WAN_DEV=$(detect_wan)
+	WAN_ADDR=$(detect_wan)
 
 	(
 		set -- $(do_http "$CN_HTTP")
@@ -177,8 +177,8 @@ while :; do
 	) &
 
 	( set -- $(do_http "$INTL_HTTP"); echo "$1 $2 $3" > "$WORKDIR/intl_http" ) &
-	( set -- $(do_http "$CN_HTTP" "$WAN_DEV" direct); echo "$1 $2 $3" > "$WORKDIR/cn_direct_http" ) &
-	( set -- $(do_http "$INTL_HTTP" "$WAN_DEV" direct); echo "$1 $2 $3" > "$WORKDIR/intl_direct_http" ) &
+	( set -- $(do_http "$CN_HTTP" "$WAN_ADDR" direct); echo "$1 $2 $3" > "$WORKDIR/cn_direct_http" ) &
+	( set -- $(do_http "$INTL_HTTP" "$WAN_ADDR" direct); echo "$1 $2 $3" > "$WORKDIR/intl_direct_http" ) &
 
 	wait
 

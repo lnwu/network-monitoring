@@ -16,3 +16,4 @@
 - `install.sh`：一行安装脚本（README 中的安装方式），先检测 OpenWrt 版本（要求 25.12+，SNAPSHOT 跳过检查），再检测依赖命令（curl/sqlite3/jsonfilter/sha256sum）并用 apk 自动安装缺失的包（sqlite3 对应 sqlite3-cli 包），最后从 Release 下载、校验 SHA-256 并安装固定命名的 ipk 资产；仓库地址为 `lnwu/network-monitoring`。
 - `netmonitor/Makefile`：包含 postinst，apk 安装后自动 enable + start 服务（install.sh 末尾的 enable/start 是重复保障）。
 - `luci-app-netmonitor/po/`：zh-cn 翻译文件；构建时若 SDK 提供 `po2lmo` 则编译为 `/usr/lib/lua/luci/i18n/luci-app-netmonitor.zh-cn.lmo`（工具缺失时静默跳过）。
+- 路由器调试：可通过 `ssh lnwu@10.0.0.1` 连接 OpenWrt；该账号 UID 为 0，等同 root。网络探针调试时优先检查 `ubus call network.interface.wan status`、绑定 WAN IPv4 的 curl 结果、`/etc/netmonitor/history.db` 最新记录和 `logread -e netmonitor`。
