@@ -18,7 +18,9 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: openwrt/sdk:aarch64_cortex-a72-25.12.0
+    container:
+      image: openwrt/sdk:aarch64_cortex-a72-25.12.0
+      options: --user 0
     steps:
       - name: Checkout
         uses: actions/checkout@v7
