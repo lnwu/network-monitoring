@@ -19,7 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/lnwu/network-monitoring/main/instal
 ## 验证
 
 ```sh
-logread -e netmonitor          # 查看每轮检测日志
+logread -e netmonitor          # 查看状态变化日志（设置中开启 log_all 后记录每轮检测）
 ubus call netmonitor status    # 查看最近一次检测结果
 ```
 

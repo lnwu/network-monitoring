@@ -3,10 +3,16 @@ return view.extend({
 	title: _('Network Status'),
 
 	load: function() {
-		return L.resolveDefault(L.ubus.call('netmonitor', 'status'), null);
+		return Promise.all([
+			L.resolveDefault(L.ubus.call('netmonitor', 'status'), null),
+			L.resolveDefault(L.uci.get('netmonitor'), {})
+		]);
 	},
 
 	render: function(data) {
+		var cfg = (data[1] && data[1].main) || {};
+		var cnTarget = cfg.cn_ping_target || 'baidu.com';
+		var intlTarget = cfg.intl_ping_target || '8.8.8.8';
 		var container = E('div');
 		var grid = E('div', { 'style': 'display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px' });
 
@@ -34,15 +40,15 @@ return view.extend({
 
 			var t = new Date(s.ts * 1000).toLocaleString();
 
-			grid.appendChild(card(_('Domestic (baidu.com)'), +s.cn_ok, [
+			grid.appendChild(card(_('Domestic (%s)').format(cnTarget), +s.cn_ok, [
 				_('HTTP status: %s (%ss)').format(s.cn_http_code, (+s.cn_http_time).toFixed(2)),
 				_('Ping: %s ms, loss: %s%%').format((+s.cn_ping > 0) ? (+s.cn_ping).toFixed(1) : '-', s.cn_loss),
 				_('Checked at: %s').format(t)
 			]));
 
-			grid.appendChild(card(_('International via proxy (google.com)'), +s.intl_ok, [
+			grid.appendChild(card(_('International via proxy'), +s.intl_ok, [
 				_('HTTP status: %s (%ss)').format(s.intl_http_code, (+s.intl_http_time).toFixed(2)),
-				_('Ping %s: %s ms, loss: %s%% (ICMP, usually not proxied)').format('8.8.8.8', (+s.intl_ping > 0) ? (+s.intl_ping).toFixed(1) : '-', s.intl_loss),
+				_('Ping %s: %s ms, loss: %s%% (ICMP, usually not proxied)').format(intlTarget, (+s.intl_ping > 0) ? (+s.intl_ping).toFixed(1) : '-', s.intl_loss),
 				_('Checked at: %s').format(t)
 			]));
 

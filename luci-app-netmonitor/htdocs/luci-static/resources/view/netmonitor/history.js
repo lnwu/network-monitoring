@@ -17,7 +17,12 @@ return view.extend({
 		var chartBox = E('div', { 'class': 'cbi-section', 'style': 'padding:8px' });
 		var message = E('div');
 
-		var todayStr = new Date().toISOString().slice(0, 10);
+		function localDateStr(d) {
+			var p = function(n) { return (n < 10 ? '0' : '') + n; };
+			return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+		}
+
+		var todayStr = localDateStr(new Date());
 
 		function shiftDate(d, delta) {
 			var t = new Date(d + 'T00:00:00');
@@ -28,7 +33,7 @@ return view.extend({
 
 		function loadDay(d) {
 			L.resolveDefault(L.ubus.call('netmonitor', 'history', { date: d }), {}).then(function(res) {
-				renderDay(d, (res && res.samples) ? res.samples : []);
+				renderDay(d, (res && res.samples) ? res.samples : [], +((res && res.interval) || 30));
 			});
 		}
 
@@ -39,7 +44,7 @@ return view.extend({
 			]);
 		}
 
-		function renderDay(date, samples) {
+		function renderDay(date, samples, interval) {
 			summaryBox.innerHTML = '';
 			chartBox.innerHTML = '';
 			message.innerHTML = '';
@@ -53,7 +58,7 @@ return view.extend({
 			var cnOk = 0, intlOk = 0, cnSum = 0, cnCnt = 0, cnMax = 0,
 				intlSum = 0, intlCnt = 0, intlMax = 0,
 				cnDown = 0, intlDown = 0, cnOut = 0, intlOut = 0,
-				gap = 30;
+				gap = interval;
 
 			samples.forEach(function(s, i) {
 				var c = +s.cn_ok, it = +s.intl_ok;

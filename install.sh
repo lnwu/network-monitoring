@@ -66,6 +66,6 @@ apk add --allow-untrusted /tmp/netmonitor.ipk /tmp/luci-app-netmonitor.ipk
 /etc/init.d/netmonitor enable
 /etc/init.d/netmonitor start
 
-rm -rf /tmp/luci-* /tmp/netmonitor.ipk /tmp/luci-app-netmonitor.ipk
+rm -rf /tmp/netmonitor.ipk /tmp/luci-app-netmonitor.ipk
 
 echo "安装完成, 请访问 LuCI -> 网络 -> Network Monitor"

@@ -10,6 +10,7 @@ INTERVAL=30
 RETENTION=30
 PING_COUNT=3
 TIMEOUT=8
+LOG_ALL=0
 CN_HTTP='https://www.baidu.com'
 CN_PING='baidu.com'
 INTL_HTTP='https://www.google.com/generate_204'
@@ -24,6 +25,7 @@ load_config() {
 	config_get RETENTION main retention "$RETENTION"
 	config_get PING_COUNT main ping_count "$PING_COUNT"
 	config_get TIMEOUT main timeout "$TIMEOUT"
+	config_get LOG_ALL main log_all "$LOG_ALL"
 	config_get CN_HTTP main cn_http_target "$CN_HTTP"
 	config_get CN_PING main cn_ping_target "$CN_PING"
 	config_get INTL_HTTP main intl_http_target "$INTL_HTTP"
@@ -53,9 +55,9 @@ do_ping() {
 	local res loss avg
 	res=$(ping -c "$2" -W 2 -q "$1" 2>/dev/null)
 	loss=$(printf '%s\n' "$res" | sed -n 's/.*,\([[:space:]]*\)\([0-9]\{1,3\}\)% packet loss.*/\2/p')
-	avg=$(printf '%s\n' "$res" | sed -n 's|.*/\([0-9.]*\)/[0-9.]* ms|\1|p')
+	avg=$(printf '%s\n' "$res" | sed -n 's/.* = //p' | cut -d'/' -f2)
 	[ -n "$loss" ] || loss=100
-	[ -n "$avg" ] || avg=0
+	case "$avg" in '' | *[!0-9.]*) avg=0 ;; esac
 	echo "$avg $loss"
 }
 
@@ -94,6 +96,7 @@ init_db() {
 		direct_http_time REAL DEFAULT 0,
 		direct_ok INTEGER DEFAULT 0
 	);"
+	sqlite3 "$DB" "PRAGMA journal_mode=WAL;"
 }
 
 log() {
@@ -102,45 +105,79 @@ log() {
 
 init_db
 
+WAN_DEV=
+last_clean=
+prev_state=
+
 while :; do
 	load_config
 	ts=$(date +%s)
+	tmp=$(mktemp -d /tmp/netmonitor.XXXXXX)
 
 	# ---- domestic ----
-	set -- $(do_http "$CN_HTTP")
-	cn_http_ok=$1 cn_http_code=$2 cn_http_time=$3
-
-	cn_ip=$(resolve_ip "$CN_PING")
-	cn_ping=0 cn_loss=100 cn_ping_ok=0
-	if [ -n "$cn_ip" ]; then
-		set -- $(do_ping "$cn_ip" "$PING_COUNT")
-		cn_ping=$1 cn_loss=$2
-		[ "$cn_loss" -lt 100 ] && cn_ping_ok=1
-	fi
-	cn_ok=$((cn_http_ok || cn_ping_ok))
+	( set -- $(do_http "$CN_HTTP"); echo "$1 $2 $3" > "$tmp/cn_http" ) &
+	(
+		cn_ip=$(resolve_ip "$CN_PING")
+		if [ -n "$cn_ip" ]; then
+			set -- $(do_ping "$cn_ip" "$PING_COUNT")
+			echo "$1 $2"
+		else
+			echo "0 100"
+		fi
+	) > "$tmp/cn_ping" &
 
 	# ---- international (default route = OpenClash proxy) ----
-	set -- $(do_http "$INTL_HTTP")
-	intl_http_ok=$1 intl_http_code=$2 intl_http_time=$3
+	( set -- $(do_http "$INTL_HTTP"); echo "$1 $2 $3" > "$tmp/intl_http" ) &
+	(
+		if [ -n "$INTL_PING" ]; then
+			set -- $(do_ping "$INTL_PING" "$PING_COUNT")
+			echo "$1 $2"
+		else
+			echo "0 100"
+		fi
+	) > "$tmp/intl_ping" &
 
-	intl_ping=0 intl_loss=100 intl_ping_ok=0
-	if [ -n "$INTL_PING" ]; then
-		set -- $(do_ping "$INTL_PING" "$PING_COUNT")
-		intl_ping=$1 intl_loss=$2
-		[ "$intl_loss" -lt 100 ] && intl_ping_ok=1
+	# ---- international, direct (bypass proxy) reference ----
+	direct_job=0
+	if [ "$DIRECT_ENABLED" = "1" ]; then
+		if [ -n "$WAN_IF" ] && [ "$WAN_IF" != "auto" ]; then
+			WAN_DEV=$WAN_IF
+		elif [ -z "$WAN_DEV" ]; then
+			WAN_DEV=$(detect_wan)
+		fi
+		if [ -n "$WAN_DEV" ]; then
+			( set -- $(do_http "$DIRECT_HTTP" "$WAN_DEV"); echo "$1 $2 $3" > "$tmp/direct" ) &
+			direct_job=1
+		fi
 	fi
+
+	wait
+
+	set -- $(cat "$tmp/cn_http" 2>/dev/null)
+	cn_http_ok=${1:-0} cn_http_code=${2:-0} cn_http_time=${3:-0}
+
+	set -- $(cat "$tmp/cn_ping" 2>/dev/null)
+	cn_ping=${1:-0} cn_loss=${2:-100}
+	cn_ping_ok=0
+	[ "$cn_loss" -lt 100 ] 2>/dev/null && cn_ping_ok=1
+	cn_ok=$((cn_http_ok || cn_ping_ok))
+
+	set -- $(cat "$tmp/intl_http" 2>/dev/null)
+	intl_http_ok=${1:-0} intl_http_code=${2:-0} intl_http_time=${3:-0}
+
+	set -- $(cat "$tmp/intl_ping" 2>/dev/null)
+	intl_ping=${1:-0} intl_loss=${2:-100}
+
 	# HTTP through the proxy is authoritative for intl availability
 	intl_ok=$intl_http_ok
 
-	# ---- international, direct (bypass proxy) reference ----
 	direct_ok=0 direct_http_code=0 direct_http_time=0
-	if [ "$DIRECT_ENABLED" = "1" ]; then
-		[ -z "$WAN_IF" ] || [ "$WAN_IF" = "auto" ] && WAN_IF=$(detect_wan)
-		if [ -n "$WAN_IF" ]; then
-			set -- $(do_http "$DIRECT_HTTP" "$WAN_IF")
-			direct_ok=$1 direct_http_code=$2 direct_http_time=$3
-		fi
+	if [ "$direct_job" = "1" ]; then
+		set -- $(cat "$tmp/direct" 2>/dev/null)
+		direct_ok=${1:-0} direct_http_code=${2:-0} direct_http_time=${3:-0}
 	fi
+
+	rm -rf "$tmp"
 
 	sqlite3 "$DB" "INSERT OR REPLACE INTO samples
 		(ts, cn_ping, cn_loss, cn_http_code, cn_http_time, cn_ok,
@@ -151,10 +188,18 @@ while :; do
 		 $intl_ping, $intl_loss, $intl_http_code, $intl_http_time, $intl_ok,
 		 $direct_http_code, $direct_http_time, $direct_ok);"
 
-	cutoff=$((ts - RETENTION * 86400))
-	sqlite3 "$DB" "DELETE FROM samples WHERE ts < $cutoff;"
+	today=$(date +%F)
+	if [ "$today" != "$last_clean" ]; then
+		cutoff=$((ts - RETENTION * 86400))
+		sqlite3 "$DB" "DELETE FROM samples WHERE ts < $cutoff;"
+		last_clean=$today
+	fi
 
-	log "ts=$ts cn_ok=$cn_ok (http=$cn_http_code ping_loss=$cn_loss%) intl_ok=$intl_ok (http=$intl_http_code) direct_ok=$direct_ok (http=$direct_http_code)"
+	state="$cn_ok$intl_ok$direct_ok"
+	if [ "$LOG_ALL" = "1" ] || [ -z "$prev_state" ] || [ "$state" != "$prev_state" ]; then
+		log "ts=$ts cn_ok=$cn_ok (http=$cn_http_code ping_loss=$cn_loss%) intl_ok=$intl_ok (http=$intl_http_code) direct_ok=$direct_ok (http=$direct_http_code)"
+	fi
+	prev_state=$state
 
 	sleep "$INTERVAL" &
 	wait $!

@@ -1,6 +1,8 @@
 #!/bin/sh
 # rpcd plugin for netmonitor
 
+. /lib/functions.sh
+
 DB=/etc/netmonitor/history.db
 
 DATE_RE='^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$'
@@ -41,6 +43,8 @@ case "$METHOD" in
 		if ! printf '%s' "$DATE" | grep -q "$DATE_RE"; then
 			DATE=$(today)
 		fi
+		config_load netmonitor
+		config_get INTERVAL main interval 30
 		samples=$(sqlite3 -json "$DB" "SELECT ts, cn_ping, cn_loss, cn_http_code, cn_http_time, cn_ok,
 				intl_ping, intl_loss, intl_http_code, intl_http_time, intl_ok,
 				direct_http_code, direct_http_time, direct_ok
@@ -48,7 +52,7 @@ case "$METHOD" in
 			WHERE date(ts, 'unixepoch', 'localtime') = '$DATE'
 			ORDER BY ts" 2>/dev/null)
 		[ -n "$samples" ] || samples='[]'
-		printf '{"date":"%s","samples":%s}\n' "$DATE" "$samples"
+		printf '{"date":"%s","interval":%s,"samples":%s}\n' "$DATE" "$INTERVAL" "$samples"
 		;;
 
 	days)
@@ -77,7 +81,8 @@ case "$METHOD" in
 				ROUND(SUM(1 - intl_ok) * 1.0 * (MAX(ts) - MIN(ts)) / COUNT(*)) AS intl_down_secs
 			FROM t
 			GROUP BY day
-			ORDER BY day DESC" 2>/dev/null)
+			ORDER BY day DESC
+			LIMIT 366" 2>/dev/null)
 		[ -n "$rows" ] || rows='[]'
 		printf '{"days":%s}\n' "$rows"
 		;;

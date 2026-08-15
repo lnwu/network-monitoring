@@ -26,6 +26,11 @@ return view.extend({
 		o.placeholder = '8';
 		o.datatype = 'and(uinteger,min(2))';
 
+		o = s.option(form.Flag, 'log_all', _('Log every check cycle'),
+			_('When disabled, only state changes are written to the system log.'));
+		o.rmempty = false;
+		o.default = '0';
+
 		o = s.option(form.Value, 'cn_http_target', _('Domestic HTTP target'));
 		o.placeholder = 'https://www.baidu.com';
 
