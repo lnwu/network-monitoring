@@ -21,7 +21,7 @@ jobs:
     container: openwrt/sdk:aarch64_cortex-a72-25.12.0
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Validate shell scripts
         run: |
@@ -73,7 +73,7 @@ jobs:
           ls -l $GITHUB_WORKSPACE/out
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ipks
           path: out/*
@@ -85,13 +85,13 @@ jobs:
       contents: write
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ipks
           path: out
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: latest
           name: latest
