@@ -40,8 +40,8 @@ jobs:
       - name: Prepare LuCI translation tool
         run: |
           cd /builder
-          ./scripts/feeds update luci
-          ./scripts/feeds install -p luci luci-base
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
           make -C feeds/luci/modules/luci-base/src clean po2lmo
           install -D -m0755 feeds/luci/modules/luci-base/src/po2lmo \
             staging_dir/hostpkg/bin/po2lmo
