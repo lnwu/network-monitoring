@@ -25,9 +25,11 @@ return view.extend({
 		var directEnabled = cfg.direct_enabled === '1';
 		var container = E('div');
 		var grid = E('div', { 'style': 'display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px' });
+		var storage = E('div', { 'class': 'cbi-section', 'style': 'margin-top:12px;padding:10px 14px' });
 
 		container.appendChild(E('h2', {}, _('Realtime Connectivity')));
 		container.appendChild(grid);
+		container.appendChild(storage);
 
 		function card(name, state, lines) {
 			var color = (state === 1) ? '#3c9248' : (state === 0) ? '#d9534f' : '#999';
@@ -41,6 +43,20 @@ return view.extend({
 
 		function draw(s) {
 			grid.innerHTML = '';
+			storage.innerHTML = '';
+			var bytes = s && s.storage_bytes != null ? +s.storage_bytes : -1;
+			var storageText = '-';
+			if (bytes >= 0) {
+				if (bytes < 1024) storageText = bytes + ' B';
+				else if (bytes < 1024 * 1024) storageText = (bytes / 1024).toFixed(1) + ' KB';
+				else if (bytes < 1024 * 1024 * 1024) storageText = (bytes / 1024 / 1024).toFixed(1) + ' MB';
+				else storageText = (bytes / 1024 / 1024 / 1024).toFixed(1) + ' GB';
+			}
+			storage.appendChild(E('div', {}, _('History data disk usage: %s').format(storageText)));
+
+			function httpStatus(code, time) {
+				return (+code > 0) ? _('HTTP status: %s (%ss)').format(code, (+time).toFixed(2)) : _('HTTP check failed');
+			}
 
 			if (!s || !s.ts) {
 				grid.appendChild(E('div', { 'class': 'cbi-section' },
@@ -51,13 +67,13 @@ return view.extend({
 			var t = new Date(s.ts * 1000).toLocaleString();
 
 			grid.appendChild(card(_('Domestic (%s)').format(cnTarget), +s.cn_ok, [
-				_('HTTP status: %s (%ss)').format(s.cn_http_code, (+s.cn_http_time).toFixed(2)),
+				httpStatus(s.cn_http_code, s.cn_http_time),
 				_('Ping: %s ms, loss: %s%%').format((+s.cn_ping > 0) ? (+s.cn_ping).toFixed(1) : '-', s.cn_loss),
 				_('Checked at: %s').format(t)
 			]));
 
 			grid.appendChild(card(_('International via proxy'), +s.intl_ok, [
-				_('HTTP status: %s (%ss)').format(s.intl_http_code, (+s.intl_http_time).toFixed(2)),
+				httpStatus(s.intl_http_code, s.intl_http_time),
 				_('Ping %s: %s ms, loss: %s%% (ICMP, usually not proxied)').format(intlTarget, (+s.intl_ping > 0) ? (+s.intl_ping).toFixed(1) : '-', s.intl_loss),
 				_('Checked at: %s').format(t)
 			]));
@@ -66,7 +82,7 @@ return view.extend({
 				var directChecked = s.direct_checked == null || +s.direct_checked === 1;
 				grid.appendChild(card(_('International direct (WAN interface reference)'), directChecked ? +s.direct_ok : -1,
 					directChecked ? [
-						_('HTTP status: %s (%ss)').format(s.direct_http_code, (+s.direct_http_time).toFixed(2)),
+						httpStatus(s.direct_http_code, s.direct_http_time),
 						_('May always fail from mainland China; reference only')
 					] : [ _('Direct check unavailable') ]));
 			}

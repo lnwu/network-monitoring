@@ -3,7 +3,17 @@
 
 . /lib/functions.sh
 
-DB=/etc/netmonitor/history.db
+DB_DIR=/etc/netmonitor
+DB=$DB_DIR/history.db
+
+storage_bytes() {
+	local blocks
+	blocks=$(du -sk "$DB_DIR" 2>/dev/null | awk 'NR == 1 { print $1 }')
+	case "$blocks" in
+		'' | *[!0-9]*) blocks=0 ;;
+	esac
+	echo $((blocks * 1024))
+}
 
 normalize_uint() {
 	local value fallback
@@ -22,9 +32,9 @@ normalize_uint() {
 
 load_interval() {
 	config_load netmonitor
-	config_get INTERVAL main interval 30
-	INTERVAL=$(normalize_uint "$INTERVAL" 30)
-	[ "$INTERVAL" -lt 10 ] 2>/dev/null && INTERVAL=10
+	config_get INTERVAL main interval 1
+	INTERVAL=$(normalize_uint "$INTERVAL" 1)
+	[ "$INTERVAL" -lt 1 ] 2>/dev/null && INTERVAL=1
 	[ "$INTERVAL" -gt 86400 ] 2>/dev/null && INTERVAL=86400
 }
 
@@ -50,15 +60,17 @@ read -r INPUT || :
 
 case "$METHOD" in
 	status)
+		storage=$(storage_bytes)
 		row=$(sqlite3 -json -cmd ".timeout 3000" "$DB" "SELECT ts, cn_ping, cn_loss, cn_http_code, cn_http_time, cn_ok,
 			intl_ping, intl_loss, intl_http_code, intl_http_time, intl_ok,
 			direct_http_code, direct_http_time, direct_ok, direct_checked
 			FROM samples ORDER BY ts DESC LIMIT 1" 2>/dev/null)
 		if [ -n "$row" ]; then
-			printf '%s' "$row" | sed 's/^\[//; s/\]$//'
-			echo
+			row=${row#\[}
+			row=${row%\]}
+			printf '{"storage_bytes":%s,%s}\n' "$storage" "$row"
 		else
-			echo '{}'
+			printf '{"storage_bytes":%s}\n' "$storage"
 		fi
 		;;
 
@@ -88,7 +100,7 @@ case "$METHOD" in
 			WITH t AS (
 				SELECT ts,
 					date(ts, 'unixepoch', 'localtime') AS day,
-					COALESCE(NULLIF(sample_interval, 0), 30) AS sample_interval,
+					COALESCE(NULLIF(sample_interval, 0), 1) AS sample_interval,
 					cn_ok, intl_ok, cn_ping, intl_ping,
 					LAG(cn_ok, 1, 1) OVER (ORDER BY ts) AS p_cn,
 					LAG(intl_ok, 1, 1) OVER (ORDER BY ts) AS p_intl,

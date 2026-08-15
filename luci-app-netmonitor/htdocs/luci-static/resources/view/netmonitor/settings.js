@@ -14,11 +14,11 @@ return view.extend({
 		s = m.section(form.NamedSection, 'main', 'netmonitor', _('General'));
 
 		o = s.option(form.Value, 'interval', _('Check interval (seconds)'));
-		o.placeholder = '30';
-		o.datatype = 'and(uinteger,min(10),max(86400))';
+		o.placeholder = '1';
+		o.datatype = 'and(uinteger,min(1),max(86400))';
 
 		o = s.option(form.Value, 'retention', _('Data retention (days)'));
-		o.placeholder = '30';
+		o.placeholder = '7';
 		o.datatype = 'and(uinteger,min(1),max(366))';
 
 		o = s.option(form.Value, 'ping_count', _('Ping count per check'));

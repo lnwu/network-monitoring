@@ -5,8 +5,8 @@
 
 DB_DIR=/etc/netmonitor
 DB="$DB_DIR/history.db"
-INTERVAL=30
-RETENTION=30
+INTERVAL=1
+RETENTION=7
 PING_COUNT=3
 TIMEOUT=8
 LOG_ALL=0
@@ -79,8 +79,8 @@ load_config() {
 	config_get DIRECT_ENABLED main direct_enabled "$DIRECT_ENABLED"
 	config_get WAN_IF main wan_interface "$WAN_IF"
 
-	INTERVAL=$(clamp_uint "$INTERVAL" 10 86400 30)
-	RETENTION=$(clamp_uint "$RETENTION" 1 366 30)
+	INTERVAL=$(clamp_uint "$INTERVAL" 1 86400 1)
+	RETENTION=$(clamp_uint "$RETENTION" 1 366 7)
 	PING_COUNT=$(clamp_uint "$PING_COUNT" 1 10 3)
 	TIMEOUT=$(clamp_uint "$TIMEOUT" 2 60 8)
 	case "$LOG_ALL" in 1) ;; *) LOG_ALL=0 ;; esac
@@ -155,7 +155,7 @@ init_db() {
 	fi
 	if ! sqlite3 "$DB" "CREATE TABLE IF NOT EXISTS samples (
 		ts INTEGER PRIMARY KEY,
-		sample_interval INTEGER DEFAULT 30,
+		sample_interval INTEGER DEFAULT 1,
 		cn_ping REAL DEFAULT 0,
 		cn_loss REAL DEFAULT 100,
 		cn_http_code INTEGER DEFAULT 0,
@@ -229,7 +229,13 @@ while :; do
 	fi
 
 	# ---- domestic ----
-	( set -- $(do_http "$CN_HTTP" "$WAN_DEV"); echo "$1 $2 $3" > "$WORKDIR/cn_http" ) &
+	(
+		set -- $(do_http "$CN_HTTP" "$WAN_DEV")
+		if [ "${2:-0}" = "0" ] && [ -n "$WAN_DEV" ]; then
+			set -- $(do_http "$CN_HTTP")
+		fi
+		echo "$1 $2 $3" > "$WORKDIR/cn_http"
+	) &
 	(
 		cn_ip=$(resolve_ip "$CN_PING")
 		if [ -n "$cn_ip" ]; then

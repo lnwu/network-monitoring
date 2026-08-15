@@ -1,6 +1,6 @@
 config netmonitor 'main'
-	option interval '30'
-	option retention '30'
+	option interval '1'
+	option retention '7'
 	option ping_count '3'
 	option timeout '8'
 	# '1' logs every cycle, '0' only logs on state change

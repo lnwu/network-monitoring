@@ -22,6 +22,9 @@ msgstr "国内 (%s)"
 msgid "HTTP status: %s (%ss)"
 msgstr "HTTP 状态: %s (%s 秒)"
 
+msgid "HTTP check failed"
+msgstr "HTTP 检测失败"
+
 msgid "Ping: %s ms, loss: %s%%"
 msgstr "Ping: %s ms, 丢包: %s%%"
 
@@ -71,10 +74,10 @@ msgid "International availability"
 msgstr "国际可用率"
 
 msgid "Domestic latency (avg / max)"
-msgstr "国内延迟（平均 / 最大）"
+msgstr "国内平均/最大延时（毫秒）"
 
 msgid "International latency (avg / max)"
-msgstr "国际延迟（平均 / 最大）"
+msgstr "国际平均/最大延时（毫秒）"
 
 msgid "Outages (domestic / international)"
 msgstr "中断次数（国内 / 国际）"
@@ -95,10 +98,10 @@ msgid "Intl. avail."
 msgstr "国际可用率"
 
 msgid "Domestic avg/max (ms)"
-msgstr "国内平均/最大（毫秒）"
+msgstr "国内平均/最大延时（毫秒）"
 
 msgid "Intl. avg/max (ms)"
-msgstr "国际平均/最大（毫秒）"
+msgstr "国际平均/最大延时（毫秒）"
 
 msgid "Outages (domestic)"
 msgstr "中断次数（国内）"
@@ -111,6 +114,9 @@ msgstr "全部记录日期"
 
 msgid "No recorded days yet."
 msgstr "暂无记录日期。"
+
+msgid "History data disk usage: %s"
+msgstr "历史数据占用磁盘空间：%s"
 
 msgid "Domestic"
 msgstr "国内"

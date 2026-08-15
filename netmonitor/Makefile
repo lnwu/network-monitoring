@@ -14,7 +14,7 @@ define Package/netmonitor
   SECTION:=net
   CATEGORY:=Network
   TITLE:=Domestic/international network connectivity monitor
-  DEPENDS:=+curl +sqlite3-cli +jsonfilter
+  DEPENDS:=+curl +ca-bundle +sqlite3-cli +jsonfilter
   PKGARCH:=all
 endef
 

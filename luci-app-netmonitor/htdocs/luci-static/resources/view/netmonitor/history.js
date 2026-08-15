@@ -42,7 +42,7 @@ return view.extend({
 			var serial = ++loadSerial;
 			L.resolveDefault(callHistory(d), {}).then(function(res) {
 				if (serial !== loadSerial) return;
-				renderDay(d, (res && res.samples) ? res.samples : [], +((res && res.interval) || 30));
+				renderDay(d, (res && res.samples) ? res.samples : [], +((res && res.interval) || 1));
 			});
 		}
 
