@@ -4,6 +4,7 @@
 
 var callDays = rpc.declare({ object: 'netmonitor', method: 'days' });
 var callHistory = rpc.declare({ object: 'netmonitor', method: 'history', params: [ 'date' ] });
+var callClear = rpc.declare({ object: 'netmonitor', method: 'clear' });
 
 return view.extend({
 	title: _('Network History'),
@@ -22,7 +23,7 @@ return view.extend({
 		/* ---------- day picker ---------- */
 		var summaryBox = E('div', { 'style': 'display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:12px 0' });
 		var chartBox = E('div', { 'class': 'cbi-section', 'style': 'padding:8px' });
-		var storageBox = E('div', { 'class': 'cbi-section', 'style': 'margin:12px 0;padding:10px 14px' });
+		var storageBox = E('div', { 'style': 'display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0' });
 		var message = E('div');
 
 		function localDateStr(d) {
@@ -223,7 +224,22 @@ return view.extend({
 			else if (bytes < 1024 * 1024 * 1024) storageText = (bytes / 1024 / 1024).toFixed(1) + ' MB';
 			else storageText = (bytes / 1024 / 1024 / 1024).toFixed(1) + ' GB';
 		}
-		storageBox.appendChild(E('div', {}, _('History data disk usage: %s').format(storageText)));
+		storageBox.appendChild(E('h3', { 'style': 'margin:0' }, _('History data disk usage: %s').format(storageText)));
+		storageBox.appendChild(E('button', {
+			type: 'button',
+			'class': 'btn cbi-button cbi-button-remove',
+			click: function() {
+				if (!confirm(_('Clear all history data?'))) return;
+				return L.resolveDefault(callClear(), null).then(function(res) {
+					if (res && +res.ok === 1) {
+						window.location.reload();
+					}
+					else {
+						alert(_('Failed to clear history data.'));
+					}
+				});
+			}
+		}, _('Clear history')));
 		container.appendChild(storageBox);
 		container.appendChild(controls);
 		container.appendChild(summaryBox);

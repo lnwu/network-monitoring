@@ -85,6 +85,15 @@ msgstr "暂无记录日期。"
 msgid "History data disk usage: %s"
 msgstr "历史数据占用磁盘空间：%s"
 
+msgid "Clear history"
+msgstr "清除历史数据"
+
+msgid "Clear all history data?"
+msgstr "确认清除全部历史数据？"
+
+msgid "Failed to clear history data."
+msgstr "清除历史数据失败。"
+
 msgid "International"
 msgstr "国际"
 

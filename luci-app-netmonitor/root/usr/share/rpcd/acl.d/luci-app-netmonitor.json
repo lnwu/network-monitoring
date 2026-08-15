@@ -8,6 +8,9 @@
 			"uci": [ "netmonitor" ]
 		},
 		"write": {
+			"ubus": {
+				"netmonitor": [ "clear" ]
+			},
 			"uci": [ "netmonitor" ]
 		}
 	}

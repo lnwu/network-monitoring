@@ -42,9 +42,9 @@ today() {
 	date +%F
 }
 
-case "$1" in
+	case "$1" in
 	list)
-		echo '{"status":{},"history":{"date":"str"},"days":{}}'
+		echo '{"status":{},"history":{"date":"str"},"days":{},"clear":{}}'
 		exit 0
 		;;
 	call)
@@ -74,6 +74,16 @@ case "$METHOD" in
 			printf '{%s}\n' "$row"
 		else
 			printf '{}\n'
+		fi
+		;;
+
+	clear)
+		if [ ! -f "$DB" ]; then
+			echo '{"ok":1}'
+		elif sqlite3 -cmd ".timeout 3000" "$DB" "DELETE FROM samples; VACUUM; PRAGMA wal_checkpoint(TRUNCATE);" >/dev/null 2>&1; then
+			echo '{"ok":1}'
+		else
+			echo '{"ok":0}'
 		fi
 		;;
 
